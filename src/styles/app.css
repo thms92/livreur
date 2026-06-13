@@ -615,3 +615,30 @@ button { font-family: inherit; cursor: pointer; }
 .ac-text { min-width: 0; display: flex; flex-direction: column; }
 .ac-label { font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ac-ville { font-size: 11.5px; color: var(--text-3); }
+
+/* ---- Marqueurs Leaflet (divIcon) ---- */
+.map-pin {
+  width: 26px; height: 26px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--col); color: #fff;
+  font-family: var(--font-mono); font-size: 12px; font-weight: 600;
+  border: 2px solid var(--map-bg);
+  --col: var(--text-2);
+}
+.map-pin.idle {
+  width: 16px; height: 16px; background: var(--map-dot-idle); border-color: var(--map-bg);
+}
+.map-pin-depot {
+  width: 16px; height: 16px; background: var(--surface);
+  border: 2px solid var(--text); transform: rotate(45deg); border-radius: 3px;
+}
+.map-pin.pulse { box-shadow: 0 0 0 0 var(--col); animation: pin-pulse 1.8s ease-out infinite; }
+@keyframes pin-pulse {
+  0%   { box-shadow: 0 0 0 0 color-mix(in oklab, var(--col) 60%, transparent); }
+  70%  { box-shadow: 0 0 0 14px color-mix(in oklab, var(--col) 0%, transparent); }
+  100% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--col) 0%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .map-pin.pulse { animation: none !important; }
+}
+.leaflet-container { background: var(--map-bg); font-family: var(--font-ui); }
