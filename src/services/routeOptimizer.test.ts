@@ -1,30 +1,60 @@
 import { describe, it, expect } from 'vitest'
-import { StubOptimizer } from './routeOptimizer'
-import { DRIVERS } from '../data/drivers'
+import { buildRoutes, autoAssign, assignToDriver, centroid } from './routeOptimizer'
+import { DEFAULT_DRIVERS } from '../data/drivers'
+import { driverColor } from '../data/palette'
 import { SEED_STOPS } from '../data/seed'
-import type { Stop } from '../types'
+import type { Driver, Stop } from '../types'
 
-const opt = new StubOptimizer()
+const DRIVERS: Driver[] = DEFAULT_DRIVERS.map((d) => ({ ...d, couleur: driverColor(d.colorIndex) }))
 
-describe('StubOptimizer (lat/lng)', () => {
-  it("conserve l'ordre curaté des arrêts seed", () => {
-    const r = opt.dispatch(SEED_STOPS, DRIVERS)
+describe('buildRoutes', () => {
+  it('groupe par chauffeur, trie par order, calcule km/min', () => {
+    const r = buildRoutes(SEED_STOPS, DRIVERS)
     expect(r.karim.stops.map((s) => s.id)).toEqual(['s1', 's2', 's3', 's4'])
-    expect(r.lea.stops.length).toBe(4)
-    expect(r.sofiane.stops.length).toBe(4)
-  })
-
-  it('km est une vraie distance (>0, format 1 décimale) et min > 0', () => {
-    const r = opt.dispatch(SEED_STOPS, DRIVERS)
     expect(r.karim.km).toMatch(/^\d+\.\d$/)
-    expect(Number(r.karim.km)).toBeGreaterThan(0)
     expect(Number(r.karim.min)).toBeGreaterThan(0)
   })
+  it('ignore les arrêts non affectés', () => {
+    const extra: Stop = { id: 'x', driver: null, ville: 'X', label: 'X', lat: 48.8, lng: 2.29 }
+    const r = buildRoutes([...SEED_STOPS, extra], DRIVERS)
+    const total = r.karim.stops.length + r.lea.stops.length + r.sofiane.stops.length
+    expect(total).toBe(12)
+  })
+})
 
-  it('affecte un arrêt sans chauffeur à la zone la plus proche (haversine)', () => {
-    // point proche du centroïde Sofiane (48.7779, 2.2804)
-    const extra: Stop = { id: 'x1', driver: null, ville: 'Test', label: 'Test', lat: 48.778, lng: 2.281 }
-    const r = opt.dispatch([...SEED_STOPS, extra], DRIVERS)
-    expect(r.sofiane.stops.some((s) => s.id === 'x1')).toBe(true)
+describe('centroid', () => {
+  it('renvoie la moyenne lat/lng, null si vide', () => {
+    expect(centroid([])).toBeNull()
+    const c = centroid([{ lat: 48.8, lng: 2.2 } as Stop, { lat: 48.6, lng: 2.4 } as Stop])
+    expect(c).toEqual({ lat: 48.7, lng: 2.3 })
+  })
+})
+
+describe('autoAssign', () => {
+  it('affecte les non-affectés au chauffeur le plus proche, sans écraser l’existant', () => {
+    const extra: Stop = { id: 'x', driver: null, ville: 'Sceaux', label: 'test', lat: 48.7785, lng: 2.2882 }
+    const out = autoAssign([...SEED_STOPS, extra], DRIVERS)
+    const got = out.find((s) => s.id === 'x')!
+    expect(got.driver).toBe('sofiane') // proche du cluster sud
+    expect(out.find((s) => s.id === 's1')!.driver).toBe('karim')
+  })
+})
+
+describe('assignToDriver', () => {
+  it('affecte un arrêt à un chauffeur et réindexe order', () => {
+    const extra: Stop = { id: 'x', driver: null, ville: 'X', label: 'X', lat: 48.815, lng: 2.30 }
+    const out = assignToDriver([...SEED_STOPS, extra], 'x', 'lea')
+    const lea = out.filter((s) => s.driver === 'lea').sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+    expect(lea.some((s) => s.id === 'x')).toBe(true)
+    expect(lea.map((s) => s.order)).toEqual(lea.map((_, i) => i))
+  })
+  it('désaffecte avec driverId null', () => {
+    const out = assignToDriver(SEED_STOPS, 's1', null)
+    expect(out.find((s) => s.id === 's1')!.driver).toBeNull()
+  })
+  it('retire l’arrêt de son ancien chauffeur quand on le réaffecte', () => {
+    const out = assignToDriver(SEED_STOPS, 's1', 'lea')
+    expect(out.find((s) => s.id === 's1')!.driver).toBe('lea')
+    expect(out.filter((s) => s.driver === 'karim').some((s) => s.id === 's1')).toBe(false)
   })
 })
