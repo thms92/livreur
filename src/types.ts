@@ -1,4 +1,4 @@
-export type DriverId = 'karim' | 'lea' | 'sofiane'
+export type DriverId = string
 export type ScreenId = 'dispatch' | 'driver'
 export type Theme = 'light' | 'dark'
 
@@ -17,12 +17,14 @@ export interface Stop {
   lng: number
 }
 
-export interface Driver {
+export interface DriverConfig {
   id: DriverId
   nom: string
+  colorIndex: number
+}
+
+export interface Driver extends DriverConfig {
   couleur: string
-  couleurHex: string
-  center: LatLng
 }
 
 export interface RouteResult {
