@@ -1,0 +1,53 @@
+/* Tokens de design — clair / sombre. data-theme posé sur <html>. */
+
+:root {
+  /* couleurs chauffeurs (signature) — partagées clair/sombre, ajustées en sombre */
+  --c-karim:   oklch(0.58 0.17 256);
+  --c-lea:     oklch(0.70 0.14 66);
+  --c-sofiane: oklch(0.62 0.13 152);
+
+  /* surfaces & texte — clair */
+  --bg:           #f4f4f2;
+  --surface:      #ffffff;
+  --surface-2:    #fafaf9;
+  --surface-3:    #f1f1ef;
+  --border:       #e4e4e0;
+  --border-2:     #d6d6d1;
+  --text:         #1b1b18;
+  --text-2:       #66665f;
+  --text-3:       #9a9a92;
+
+  /* carte */
+  --map-bg:       #fbfbfa;
+  --map-grid:     #ececea;
+  --map-road:     #e2e2de;
+  --map-seine:    #dde9f0;
+  --map-dot-idle: #c4c4bd;
+
+  --radius: 9px;
+  --radius-sm: 6px;
+  --font-ui: "IBM Plex Sans", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+[data-theme="dark"] {
+  --c-karim:   oklch(0.66 0.16 256);
+  --c-lea:     oklch(0.76 0.14 66);
+  --c-sofiane: oklch(0.70 0.13 152);
+
+  --bg:           #0e0e0f;
+  --surface:      #161618;
+  --surface-2:    #1c1c1f;
+  --surface-3:    #232327;
+  --border:       #29292d;
+  --border-2:     #36363b;
+  --text:         #ededeb;
+  --text-2:       #9c9c97;
+  --text-3:       #6a6a66;
+
+  --map-bg:       #131316;
+  --map-grid:     #1f1f23;
+  --map-road:     #26262b;
+  --map-seine:    #182530;
+  --map-dot-idle: #3a3a40;
+}
