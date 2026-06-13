@@ -2,19 +2,19 @@ export type DriverId = 'karim' | 'lea' | 'sofiane'
 export type ScreenId = 'dispatch' | 'driver'
 export type Theme = 'light' | 'dark'
 
-export interface Point {
-  x: number
-  y: number
+export interface LatLng {
+  lat: number
+  lng: number
 }
 
 export interface Stop {
   id: string
   driver: DriverId | null
   order?: number
+  label: string
   ville: string
-  adresse: string
-  x: number
-  y: number
+  lat: number
+  lng: number
 }
 
 export interface Driver {
@@ -22,7 +22,7 @@ export interface Driver {
   nom: string
   couleur: string
   couleurHex: string
-  center: Point
+  center: LatLng
 }
 
 export interface RouteResult {
@@ -33,9 +33,10 @@ export interface RouteResult {
 
 export type Routes = Record<DriverId, RouteResult>
 
-export interface GeocodeResult {
+export interface Suggestion {
+  id: string
+  label: string
   ville: string
-  adresse: string
-  x: number
-  y: number
+  lat: number
+  lng: number
 }
