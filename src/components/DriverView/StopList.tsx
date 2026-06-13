@@ -24,7 +24,7 @@ export function StopList({ arrets, idx, total, fini }: Props) {
             <span className="srow-num">{done ? '✓' : i + 1}</span>
             <div className="srow-body">
               <div className="srow-ville">{s.ville}</div>
-              <div className="srow-adr">{s.adresse}</div>
+              <div className="srow-adr">{s.label}</div>
             </div>
             {cur && <span className="srow-flag">en cours</span>}
           </div>

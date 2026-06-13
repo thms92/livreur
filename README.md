@@ -6,7 +6,7 @@ limite de 9 arrêts de Google Maps). Maps n'est ouvert que pour le trajet vers l
 cours, jamais pour une liste de stops.
 
 Deux écrans (segmented control en haut) :
-- **Console Répartiteur** — carte SVG des arrêts, saisie d'adresses, « Répartir par zone », cartes chauffeur.
+- **Console Répartiteur** — carte Leaflet des arrêts, saisie d'adresses (autocomplétion BAN), « Répartir par zone », cartes chauffeur.
 - **Vue chauffeur** — écran terrain façon téléphone : arrêt en cours, liste ordonnée, ouverture Maps.
 
 Mode clair/sombre, responsive jusqu'au mobile, IBM Plex Sans (UI) + IBM Plex Mono (chiffres).
@@ -24,16 +24,17 @@ npm test           # suite Vitest
 
 - `src/styles/` — `tokens.css` (variables clair/sombre via `data-theme`) + `app.css` (classes).
 - `src/types.ts` — types partagés (`Stop`, `Driver`, `Routes`, …).
-- `src/data/` — `drivers`, `communes`, `seed` (données du prototype).
+- `src/data/` — `drivers`, `seed` (données du prototype, coordonnées `lat`/`lng` réelles).
 - `src/services/` — logique pure testée, **isolée derrière des interfaces** prêtes à industrialiser :
-  - `geocoder.ts` — `Geocoder` + `StubGeocoder` (table de communes) → remplacer par un vrai géocodage (ex. `api-adresse.data.gouv.fr`).
+  - `addressProvider.ts` — `AddressProvider` + `BanProvider` : géocodage via l'**API Adresse (BAN)** `api-adresse.data.gouv.fr` (`suggest`/`geocodeFirst`).
+  - `geo.ts` — distances **haversine** entre coordonnées `lat`/`lng`.
   - `routeOptimizer.ts` — `RouteOptimizer` + `StubOptimizer` (heuristique zone + insertion moindre coût) → remplacer par le vrai service d'optimisation.
-  - `geometry.ts` — utilitaires SVG.
-- `src/state/` — `LivreurContext` (état + actions dérivées) persisté en `localStorage` (`usePersistentState`, préfixe `livreur:`).
-- `src/components/` — `Dispatcher/`, `DriverView/`, `map/` (SVG schématique → remplaçable par une vraie carte), `icons/`.
+  - `stopId.ts` — génération d'identifiants d'arrêts.
+- `src/state/` — `LivreurContext` (état + actions dérivées, `provider` injectable) persisté en `localStorage` (`usePersistentState`, préfixe `livreur:v2:`).
+- `src/components/` — `Dispatcher/`, `DriverView/`, `map/`, `icons/`.
 
-Le fond de carte est un **SVG schématique** dessiné par code (viewBox `0 0 960 720`), isolé dans
-`components/map/` pour pouvoir être remplacé par une vraie carte (Leaflet/MapLibre).
+La carte est une **carte Leaflet** (tuiles **CARTO** Positron/dark_matter selon le thème), isolée
+dans `components/map/` (`BaseMap`, `RouteLayer`, `DispatcherMap`, `PhoneMap`, `pins`).
 
 ## Documents
 

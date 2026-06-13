@@ -20,6 +20,7 @@ export function Dispatcher() {
     addBulk,
     removeStop,
     reduceMotion,
+    provider,
   } = useLivreur()
 
   return (
@@ -107,7 +108,7 @@ export function Dispatcher() {
 
         <div className="drivers" style={{ paddingTop: dispatched ? 0 : 12 }}>
           <StopsPanel
-            stops={stops} assign={assign} dispatched={dispatched}
+            stops={stops} assign={assign} dispatched={dispatched} provider={provider}
             addStop={addStop} addBulk={addBulk} removeStop={removeStop}
           />
         </div>

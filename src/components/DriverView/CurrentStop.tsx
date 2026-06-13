@@ -18,9 +18,9 @@ export function CurrentStop({ courant, idx, total, onAdvance }: Props) {
       </div>
       <div className="current-body">
         <div className="current-ville">{courant.ville}</div>
-        <div className="current-adr">{courant.adresse}</div>
+        <div className="current-adr">{courant.label}</div>
         <div className="current-actions">
-          <button className="btn btn-maps" onClick={() => openInMaps(courant)}>
+          <button className="btn btn-maps" onClick={() => openInMaps({ adresse: courant.label, ville: courant.ville })}>
             <IcoMaps /> Ouvrir cet arrêt dans Maps
           </button>
           <button className="btn btn-next" onClick={onAdvance}>
