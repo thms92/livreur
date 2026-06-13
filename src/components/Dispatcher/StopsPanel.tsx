@@ -1,27 +1,23 @@
 import { useState, type CSSProperties } from 'react'
-import type { Stop } from '../../types'
-import { IcoList, IcoPlus, IcoX } from '../icons'
+import type { Stop, Suggestion } from '../../types'
+import type { AddressProvider } from '../../services/addressProvider'
+import { IcoList, IcoX } from '../icons'
+import { AddressAutocomplete } from './AddressAutocomplete'
 
 interface Props {
   stops: Stop[]
   assign: Record<string, string>
   dispatched: boolean
-  addStop: (line: string) => void
+  provider: AddressProvider
+  addStop: (s: Suggestion) => void
   addBulk: (text: string) => void
   removeStop: (id: string) => void
 }
 
-export function StopsPanel({ stops, assign, dispatched, addStop, addBulk, removeStop }: Props) {
-  const [val, setVal] = useState('')
+export function StopsPanel({ stops, assign, dispatched, provider, addStop, addBulk, removeStop }: Props) {
   const [bulkOpen, setBulkOpen] = useState(false)
   const [bulk, setBulk] = useState('')
 
-  function submit() {
-    if (val.trim()) {
-      addStop(val)
-      setVal('')
-    }
-  }
   function submitBulk() {
     if (bulk.trim()) {
       addBulk(bulk)
@@ -42,18 +38,7 @@ export function StopsPanel({ stops, assign, dispatched, addStop, addBulk, remove
         </button>
       </div>
 
-      <div className="add-row">
-        <input
-          className="add-input" value={val} placeholder="Adresse, commune…"
-          onChange={(e) => setVal(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') submit()
-          }}
-        />
-        <button className="add-btn" onClick={submit} title="Ajouter l'arrêt" aria-label="Ajouter">
-          <IcoPlus />
-        </button>
-      </div>
+      <AddressAutocomplete provider={provider} onPick={addStop} />
 
       {bulkOpen && (
         <div className="bulk">
@@ -68,7 +53,7 @@ export function StopsPanel({ stops, assign, dispatched, addStop, addBulk, remove
         </div>
       )}
 
-      <div className="add-hint">Indiquez la commune pour un placement précis sur la carte.</div>
+      <div className="add-hint">Choisissez une adresse dans la liste pour un placement vérifié sur la carte.</div>
 
       <div className="stop-list">
         {stops.map((s) => {
@@ -78,7 +63,7 @@ export function StopsPanel({ stops, assign, dispatched, addStop, addBulk, remove
               <span className={'stopitem-dot' + (col ? ' on' : '')} />
               <div className="stopitem-body">
                 <div className="stopitem-ville">{s.ville}</div>
-                <div className="stopitem-adr">{s.adresse}</div>
+                <div className="stopitem-adr">{s.label}</div>
               </div>
               <button className="stopitem-x" onClick={() => removeStop(s.id)} title="Retirer" aria-label="Retirer">
                 <IcoX />
