@@ -1,11 +1,16 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { renderHook, act, waitFor } from '@testing-library/react'
+import { renderHook, act } from '@testing-library/react'
 import { LivreurProvider, useLivreur } from './LivreurContext'
 import type { ReactNode } from 'react'
+import type { Suggestion } from '../types'
 
 const wrapper = ({ children }: { children: ReactNode }) => (
   <LivreurProvider>{children}</LivreurProvider>
 )
+
+const SUG: Suggestion = {
+  id: 'sug1', label: '11 rue du Loup Pendu', ville: 'Le Plessis-Robinson', lat: 48.7784, lng: 2.2596,
+}
 
 describe('LivreurContext', () => {
   beforeEach(() => localStorage.clear())
@@ -16,6 +21,14 @@ describe('LivreurContext', () => {
     expect(result.current.routes.karim.stops.length).toBe(4)
   })
 
+  it('addStop ajoute un arrêt depuis une suggestion (lat/lng conservés)', () => {
+    const { result } = renderHook(() => useLivreur(), { wrapper })
+    act(() => result.current.addStop(SUG))
+    expect(result.current.stops.length).toBe(13)
+    const added = result.current.stops[result.current.stops.length - 1]
+    expect(added).toMatchObject({ label: SUG.label, ville: SUG.ville, lat: SUG.lat, lng: SUG.lng, driver: null })
+  })
+
   it("advance borne la progression au nombre d'arrêts", () => {
     const { result } = renderHook(() => useLivreur(), { wrapper })
     const n = result.current.routes.karim.stops.length
@@ -23,14 +36,6 @@ describe('LivreurContext', () => {
       for (let i = 0; i < n + 3; i++) result.current.advance('karim')
     })
     expect(result.current.progress.karim).toBe(n)
-  })
-
-  it('addStop géocode et ajoute un arrêt (recalcul en direct)', async () => {
-    const { result } = renderHook(() => useLivreur(), { wrapper })
-    await act(async () => {
-      await result.current.addStop('1 rue de Test, Clamart')
-    })
-    await waitFor(() => expect(result.current.stops.length).toBe(13))
   })
 
   it("removeStop retire l'arrêt", () => {
