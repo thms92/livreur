@@ -1,16 +1,16 @@
 import type { Stop } from '../types'
 
 export const SEED_STOPS: Stop[] = [
-  { id: 's1',  driver: 'karim',   order: 0, ville: 'Malakoff',             adresse: '12 rue Paul Vaillant-Couturier', x: 548, y: 232 },
-  { id: 's2',  driver: 'karim',   order: 1, ville: 'Vanves',               adresse: '8 rue Jean Bleuzen',             x: 452, y: 250 },
-  { id: 's3',  driver: 'karim',   order: 2, ville: 'Issy-les-Moulineaux',  adresse: '45 avenue Victor Cresson',       x: 340, y: 214 },
-  { id: 's4',  driver: 'karim',   order: 3, ville: 'Boulogne-Billancourt', adresse: '27 rue de Paris',                x: 236, y: 132 },
-  { id: 's5',  driver: 'lea',     order: 0, ville: 'Montrouge',            adresse: '5 avenue de la République',      x: 656, y: 244 },
-  { id: 's6',  driver: 'lea',     order: 1, ville: 'Bagneux',              adresse: '33 avenue Aristide Briand',      x: 628, y: 452 },
-  { id: 's7',  driver: 'lea',     order: 2, ville: 'Châtillon',            adresse: '14 rue Gabriel Péri',            x: 496, y: 396 },
-  { id: 's8',  driver: 'lea',     order: 3, ville: 'Clamart',              adresse: '62 avenue Jean Jaurès',          x: 360, y: 372 },
-  { id: 's9',  driver: 'sofiane', order: 0, ville: 'Fontenay-aux-Roses',   adresse: '9 rue Boucicaut',                x: 472, y: 488 },
-  { id: 's10', driver: 'sofiane', order: 1, ville: 'Le Plessis-Robinson',  adresse: '21 avenue Charles de Gaulle',    x: 356, y: 556 },
-  { id: 's11', driver: 'sofiane', order: 2, ville: 'Châtenay-Malabry',     adresse: '40 avenue de la Division Leclerc', x: 468, y: 644 },
-  { id: 's12', driver: 'sofiane', order: 3, ville: 'Sceaux',               adresse: '7 rue Houdan',                   x: 596, y: 568 },
+  { id: 's1',  driver: 'karim',   order: 0, ville: 'Malakoff',             label: '12 rue Paul Vaillant-Couturier',     lat: 48.814703, lng: 2.294854 },
+  { id: 's2',  driver: 'karim',   order: 1, ville: 'Vanves',               label: '8 rue Jean Bleuzen',                 lat: 48.820557, lng: 2.291491 },
+  { id: 's3',  driver: 'karim',   order: 2, ville: 'Issy-les-Moulineaux',  label: '45 avenue Victor Cresson',           lat: 48.821940, lng: 2.265116 },
+  { id: 's4',  driver: 'karim',   order: 3, ville: 'Boulogne-Billancourt', label: '27 rue de Paris',                    lat: 48.839632, lng: 2.247459 },
+  { id: 's5',  driver: 'lea',     order: 0, ville: 'Montrouge',            label: '5 avenue de la République',          lat: 48.815441, lng: 2.317755 },
+  { id: 's6',  driver: 'lea',     order: 1, ville: 'Bagneux',              label: '33 avenue Aristide Briand',          lat: 48.796757, lng: 2.321793 },
+  { id: 's7',  driver: 'lea',     order: 2, ville: 'Châtillon',            label: '14 rue Gabriel Péri',                lat: 48.803007, lng: 2.287960 },
+  { id: 's8',  driver: 'lea',     order: 3, ville: 'Clamart',              label: '62 avenue Jean Jaurès',              lat: 48.803737, lng: 2.265857 },
+  { id: 's9',  driver: 'sofiane', order: 0, ville: 'Fontenay-aux-Roses',   label: '9 rue Boucicaut',                    lat: 48.792718, lng: 2.286172 },
+  { id: 's10', driver: 'sofiane', order: 1, ville: 'Le Plessis-Robinson',  label: '21 avenue Charles de Gaulle',        lat: 48.778385, lng: 2.259606 },
+  { id: 's11', driver: 'sofiane', order: 2, ville: 'Châtenay-Malabry',     label: '40 avenue de la Division Leclerc',   lat: 48.761921, lng: 2.287846 },
+  { id: 's12', driver: 'sofiane', order: 3, ville: 'Sceaux',               label: '7 rue Houdan',                       lat: 48.778528, lng: 2.288238 },
 ]
