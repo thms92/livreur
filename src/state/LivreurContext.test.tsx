@@ -2,45 +2,63 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { LivreurProvider, useLivreur } from './LivreurContext'
 import type { ReactNode } from 'react'
-import type { Suggestion } from '../types'
 
-const wrapper = ({ children }: { children: ReactNode }) => (
-  <LivreurProvider>{children}</LivreurProvider>
-)
+const wrapper = ({ children }: { children: ReactNode }) => <LivreurProvider>{children}</LivreurProvider>
 
-const SUG: Suggestion = {
-  id: 'sug1', label: '11 rue du Loup Pendu', ville: 'Le Plessis-Robinson', lat: 48.7784, lng: 2.2596,
-}
-
-describe('LivreurContext', () => {
+describe('LivreurContext — chauffeurs dynamiques', () => {
   beforeEach(() => localStorage.clear())
 
-  it('démarre avec les 12 arrêts seed répartis en 3 tournées', () => {
+  it('démarre avec 3 chauffeurs et les 12 arrêts seed groupés', () => {
     const { result } = renderHook(() => useLivreur(), { wrapper })
-    expect(result.current.stops.length).toBe(12)
+    expect(result.current.drivers.map((d) => d.id)).toEqual(['karim', 'lea', 'sofiane'])
     expect(result.current.routes.karim.stops.length).toBe(4)
   })
 
-  it('addStop ajoute un arrêt depuis une suggestion (lat/lng conservés)', () => {
+  it('addDriver ajoute un chauffeur avec une couleur libre', () => {
     const { result } = renderHook(() => useLivreur(), { wrapper })
-    act(() => result.current.addStop(SUG))
-    expect(result.current.stops.length).toBe(13)
-    const added = result.current.stops[result.current.stops.length - 1]
-    expect(added).toMatchObject({ label: SUG.label, ville: SUG.ville, lat: SUG.lat, lng: SUG.lng, driver: null })
+    act(() => result.current.addDriver('Michel'))
+    const michel = result.current.drivers.find((d) => d.nom === 'Michel')!
+    expect(michel).toBeTruthy()
+    expect(michel.couleur).toBe('var(--c-4)')
+    expect(result.current.routes[michel.id].stops.length).toBe(0)
   })
 
-  it("advance borne la progression au nombre d'arrêts", () => {
+  it('renameDriver renomme', () => {
     const { result } = renderHook(() => useLivreur(), { wrapper })
-    const n = result.current.routes.karim.stops.length
+    act(() => result.current.renameDriver('karim', 'Karim B.'))
+    expect(result.current.drivers.find((d) => d.id === 'karim')!.nom).toBe('Karim B.')
+  })
+
+  it('removeDriver supprime et repasse ses arrêts en non affectés', () => {
+    const { result } = renderHook(() => useLivreur(), { wrapper })
+    act(() => result.current.removeDriver('karim'))
+    expect(result.current.drivers.some((d) => d.id === 'karim')).toBe(false)
+    expect(result.current.stops.filter((s) => s.driver === 'karim').length).toBe(0)
+    expect(result.current.stops.some((s) => s.id === 's1' && s.driver === null)).toBe(true)
+  })
+
+  it('ne supprime pas le dernier chauffeur', () => {
+    const { result } = renderHook(() => useLivreur(), { wrapper })
     act(() => {
-      for (let i = 0; i < n + 3; i++) result.current.advance('karim')
+      result.current.removeDriver('karim')
+      result.current.removeDriver('lea')
+      result.current.removeDriver('sofiane')
     })
-    expect(result.current.progress.karim).toBe(n)
+    expect(result.current.drivers.length).toBeGreaterThanOrEqual(1)
   })
 
-  it("removeStop retire l'arrêt", () => {
+  it('assignStop affecte un arrêt au chauffeur actif puis le désaffecte', () => {
     const { result } = renderHook(() => useLivreur(), { wrapper })
-    act(() => result.current.removeStop('s1'))
-    expect(result.current.stops.some((s) => s.id === 's1')).toBe(false)
+    act(() => result.current.assignStop('s5', 'karim'))
+    expect(result.current.stops.find((s) => s.id === 's5')!.driver).toBe('karim')
+    act(() => result.current.assignStop('s5', null))
+    expect(result.current.stops.find((s) => s.id === 's5')!.driver).toBeNull()
+  })
+
+  it('autoAssign réaffecte les arrêts non affectés', () => {
+    const { result } = renderHook(() => useLivreur(), { wrapper })
+    act(() => result.current.assignStop('s5', null))
+    act(() => result.current.autoAssign())
+    expect(result.current.stops.find((s) => s.id === 's5')!.driver).not.toBeNull()
   })
 })

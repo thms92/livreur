@@ -7,36 +7,42 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import type { DriverId, Routes, ScreenId, Stop, Suggestion, Theme } from '../types'
-import { DRIVERS } from '../data/drivers'
+import type { Driver, DriverConfig, DriverId, Routes, ScreenId, Stop, Suggestion, Theme } from '../types'
+import { DEFAULT_DRIVERS } from '../data/drivers'
 import { SEED_STOPS } from '../data/seed'
+import { driverColor, nextColorIndex } from '../data/palette'
 import { BanProvider, type AddressProvider } from '../services/addressProvider'
 import { makeStopId } from '../services/stopId'
-import { StubOptimizer } from '../services/routeOptimizer'
+import { assignToDriver, autoAssign as autoAssignStops, buildRoutes } from '../services/routeOptimizer'
 import { usePersistentState } from './usePersistentState'
 
 const defaultProvider = new BanProvider()
-const optimizer = new StubOptimizer()
 
 export interface LivreurState {
   theme: Theme
   screen: ScreenId
-  dispatched: boolean
   selected: DriverId
+  activeDriver: DriverId
   highlighted: DriverId | null
   progress: Record<DriverId, number>
   stops: Stop[]
+  drivers: Driver[]
   routes: Routes
   assign: Record<string, string>
   provider: AddressProvider
   toggleTheme: () => void
   setScreen: (s: ScreenId) => void
-  setDispatched: (v: boolean) => void
   setSelected: (id: DriverId) => void
+  setActiveDriver: (id: DriverId) => void
   setHighlighted: (id: DriverId | null) => void
+  addDriver: (nom: string) => void
+  renameDriver: (id: DriverId, nom: string) => void
+  removeDriver: (id: DriverId) => void
   addStop: (s: Suggestion) => void
   addBulk: (text: string) => Promise<void>
   removeStop: (id: string) => void
+  assignStop: (stopId: string, driverId: DriverId | null) => void
+  autoAssign: () => void
   openDriver: (id: DriverId) => void
   goDriver: () => void
   advance: (id: DriverId) => void
@@ -61,14 +67,15 @@ export function LivreurProvider({
 }) {
   const [theme, setTheme] = usePersistentState<Theme>('theme', 'light')
   const [screen, setScreen] = usePersistentState<ScreenId>('screen', 'dispatch')
-  const [dispatched, setDispatched] = usePersistentState<boolean>('dispatched', false)
-  const [selected, setSelected] = usePersistentState<DriverId>('selected', 'karim')
+  const [configs, setConfigs] = usePersistentState<DriverConfig[]>('drivers', DEFAULT_DRIVERS)
+  const [stops, setStops] = usePersistentState<Stop[]>('stops', SEED_STOPS)
   const [progress, setProgress] = usePersistentState<Record<DriverId, number>>('progress', {
     karim: 0,
     lea: 0,
     sofiane: 0,
   })
-  const [stops, setStops] = usePersistentState<Stop[]>('stops', SEED_STOPS)
+  const [selectedRaw, setSelected] = usePersistentState<DriverId>('selected', 'karim')
+  const [activeRaw, setActiveDriver] = useState<DriverId>(() => configs[0]?.id ?? 'karim')
   const [highlighted, setHighlighted] = useState<DriverId | null>(null)
 
   const reduceMotion =
@@ -80,14 +87,42 @@ export function LivreurProvider({
     document.documentElement.setAttribute('data-theme', theme)
   }, [theme])
 
-  const routes = useMemo(() => optimizer.dispatch(stops, DRIVERS), [stops])
+  const drivers = useMemo<Driver[]>(
+    () => configs.map((c) => ({ ...c, couleur: driverColor(c.colorIndex) })),
+    [configs],
+  )
+
+  const selected = drivers.some((d) => d.id === selectedRaw) ? selectedRaw : (drivers[0]?.id ?? 'karim')
+  const activeDriver = drivers.some((d) => d.id === activeRaw) ? activeRaw : (drivers[0]?.id ?? 'karim')
+
+  const routes = useMemo(() => buildRoutes(stops, drivers), [stops, drivers])
   const assign = useMemo(() => {
     const m: Record<string, string> = {}
-    DRIVERS.forEach((d) => routes[d.id].stops.forEach((s) => {
+    drivers.forEach((d) => routes[d.id].stops.forEach((s) => {
       m[s.id] = d.couleur
     }))
     return m
-  }, [routes])
+  }, [routes, drivers])
+
+  const addDriver = useCallback((nom: string) => {
+    const label = nom.trim()
+    if (!label) return
+    setConfigs((prev) => [
+      ...prev,
+      { id: makeStopId(), nom: label, colorIndex: nextColorIndex(prev.map((c) => c.colorIndex)) },
+    ])
+  }, [setConfigs])
+
+  const renameDriver = useCallback((id: DriverId, nom: string) => {
+    const label = nom.trim()
+    if (!label) return
+    setConfigs((prev) => prev.map((c) => (c.id === id ? { ...c, nom: label } : c)))
+  }, [setConfigs])
+
+  const removeDriver = useCallback((id: DriverId) => {
+    setConfigs((prev) => (prev.length <= 1 ? prev : prev.filter((c) => c.id !== id)))
+    setStops((prev) => prev.map((s) => (s.driver === id ? { ...s, driver: null } : s)))
+  }, [setConfigs, setStops])
 
   const addStop = useCallback((s: Suggestion) => {
     setStops((prev) => [
@@ -112,18 +147,23 @@ export function LivreurProvider({
     setStops((prev) => prev.filter((s) => s.id !== id))
   }, [setStops])
 
+  const assignStop = useCallback((stopId: string, driverId: DriverId | null) => {
+    setStops((prev) => assignToDriver(prev, stopId, driverId))
+  }, [setStops])
+
+  const autoAssign = useCallback(() => {
+    setStops((prev) => autoAssignStops(prev, drivers))
+  }, [drivers, setStops])
+
   const openDriver = useCallback((id: DriverId) => {
     setSelected(id)
     setScreen('driver')
   }, [setSelected, setScreen])
 
-  const goDriver = useCallback(() => {
-    if (!dispatched) setDispatched(true)
-    setScreen('driver')
-  }, [dispatched, setDispatched, setScreen])
+  const goDriver = useCallback(() => setScreen('driver'), [setScreen])
 
   const advance = useCallback((id: DriverId) => {
-    const n = routes[id].stops.length
+    const n = routes[id]?.stops.length ?? 0
     setProgress((p) => ({ ...p, [id]: Math.min((p[id] ?? 0) + 1, n) }))
   }, [routes, setProgress])
 
@@ -138,9 +178,11 @@ export function LivreurProvider({
   )
 
   const value: LivreurState = {
-    theme, screen, dispatched, selected, highlighted, progress, stops, routes, assign, provider,
-    toggleTheme, setScreen, setDispatched, setSelected, setHighlighted,
-    addStop, addBulk, removeStop, openDriver, goDriver, advance, resetTour,
+    theme, screen, selected, activeDriver, highlighted, progress, stops, drivers, routes, assign, provider,
+    toggleTheme, setScreen, setSelected, setActiveDriver, setHighlighted,
+    addDriver, renameDriver, removeDriver,
+    addStop, addBulk, removeStop, assignStop, autoAssign,
+    openDriver, goDriver, advance, resetTour,
     reduceMotion: !!reduceMotion,
   }
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
