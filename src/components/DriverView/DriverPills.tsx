@@ -1,17 +1,17 @@
 import type { CSSProperties } from 'react'
 import type { Driver, DriverId, Routes } from '../../types'
-import { DRIVERS } from '../../data/drivers'
 
 interface Props {
+  drivers: Driver[]
   driver: Driver
   routes: Routes
   setSelected: (id: DriverId) => void
 }
 
-export function DriverPills({ driver, routes, setSelected }: Props) {
+export function DriverPills({ drivers, driver, routes, setSelected }: Props) {
   return (
     <div className="driver-pills">
-      {DRIVERS.map((d) => (
+      {drivers.map((d) => (
         <button
           key={d.id}
           className={'pill' + (d.id === driver.id ? ' active' : '')}

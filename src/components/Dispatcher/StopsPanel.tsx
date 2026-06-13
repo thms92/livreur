@@ -7,14 +7,15 @@ import { AddressAutocomplete } from './AddressAutocomplete'
 interface Props {
   stops: Stop[]
   assign: Record<string, string>
-  dispatched: boolean
   provider: AddressProvider
+  activeColor: string
   addStop: (s: Suggestion) => void
   addBulk: (text: string) => void
   removeStop: (id: string) => void
+  assignStop: (id: string) => void
 }
 
-export function StopsPanel({ stops, assign, dispatched, provider, addStop, addBulk, removeStop }: Props) {
+export function StopsPanel({ stops, assign, provider, activeColor, addStop, addBulk, removeStop, assignStop }: Props) {
   const [bulkOpen, setBulkOpen] = useState(false)
   const [bulk, setBulk] = useState('')
 
@@ -53,19 +54,33 @@ export function StopsPanel({ stops, assign, dispatched, provider, addStop, addBu
         </div>
       )}
 
-      <div className="add-hint">Choisissez une adresse dans la liste pour un placement vérifié sur la carte.</div>
+      <div className="add-hint">Cliquez un arrêt pour l’affecter au chauffeur actif. La croix le retire.</div>
 
       <div className="stop-list">
         {stops.map((s) => {
-          const col = dispatched && assign[s.id] ? assign[s.id] : null
+          const col = assign[s.id] ?? null
           return (
-            <div className="stopitem" key={s.id} style={col ? ({ '--col': col } as CSSProperties) : undefined}>
+            <div
+              className={'stopitem stopitem-click' + (col ? '' : ' unassigned')}
+              key={s.id}
+              style={(col ? { '--col': col } : { '--col': activeColor }) as CSSProperties}
+              onClick={() => assignStop(s.id)}
+              title="Affecter au chauffeur actif"
+            >
               <span className={'stopitem-dot' + (col ? ' on' : '')} />
               <div className="stopitem-body">
                 <div className="stopitem-ville">{s.ville}</div>
                 <div className="stopitem-adr">{s.label}</div>
               </div>
-              <button className="stopitem-x" onClick={() => removeStop(s.id)} title="Retirer" aria-label="Retirer">
+              <button
+                className="stopitem-x"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  removeStop(s.id)
+                }}
+                title="Retirer"
+                aria-label="Retirer"
+              >
                 <IcoX />
               </button>
             </div>

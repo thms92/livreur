@@ -24,13 +24,14 @@ npm test           # suite Vitest
 
 - `src/styles/` — `tokens.css` (variables clair/sombre via `data-theme`) + `app.css` (classes).
 - `src/types.ts` — types partagés (`Stop`, `Driver`, `Routes`, …).
-- `src/data/` — `drivers`, `seed` (données du prototype, coordonnées `lat`/`lng` réelles).
+- `src/data/` — `drivers` (`DEFAULT_DRIVERS`, dépôt), `seed` (arrêts, coordonnées `lat`/`lng` réelles), `palette` (couleurs chauffeurs `--c-1..8` + `driverColor`).
 - `src/services/` — logique pure testée, **isolée derrière des interfaces** prêtes à industrialiser :
   - `addressProvider.ts` — `AddressProvider` + `BanProvider` : géocodage via l'**API Adresse (BAN)** `api-adresse.data.gouv.fr` (`suggest`/`geocodeFirst`).
   - `geo.ts` — distances **haversine** entre coordonnées `lat`/`lng`.
-  - `routeOptimizer.ts` — `RouteOptimizer` + `StubOptimizer` (heuristique zone + insertion moindre coût) → remplacer par le vrai service d'optimisation.
-  - `stopId.ts` — génération d'identifiants d'arrêts.
-- `src/state/` — `LivreurContext` (état + actions dérivées, `provider` injectable) persisté en `localStorage` (`usePersistentState`, préfixe `livreur:v2:`).
+  - `routeOptimizer.ts` — `buildRoutes` (groupement + stats), `autoAssign` (remplissage par zone, centroïde le plus proche), `assignToDriver` (affectation manuelle, insertion moindre coût) → remplacer par le vrai service d'optimisation.
+  - `stopId.ts` — génération d'identifiants.
+- **Chauffeurs dynamiques** : ajout/renommage/suppression (état persisté `livreur:v2:drivers`), couleurs auto depuis la palette. **Affectation manuelle** des arrêts : on désigne un chauffeur *actif* puis on clique ses arrêts ; « Répartir par zone » remplit automatiquement les arrêts non affectés sans écraser le manuel.
+- `src/state/` — `LivreurContext` (état + actions : `addDriver/renameDriver/removeDriver`, `assignStop`, `autoAssign`, …, `provider` injectable) persisté en `localStorage` (`usePersistentState`, préfixe `livreur:v2:`).
 - `src/components/` — `Dispatcher/`, `DriverView/`, `map/`, `icons/`.
 
 La carte est une **carte Leaflet** (tuiles **CARTO** Positron/dark_matter selon le thème), isolée

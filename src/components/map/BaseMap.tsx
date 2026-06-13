@@ -1,5 +1,5 @@
 import { useEffect, type ReactNode } from 'react'
-import { MapContainer, TileLayer, useMap } from 'react-leaflet'
+import { MapContainer, TileLayer, AttributionControl, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import { useLivreur } from '../../state/LivreurContext'
 import type { LatLng } from '../../types'
@@ -48,9 +48,10 @@ export function BaseMap({ points, interactive = true, children }: Props) {
       scrollWheelZoom={interactive}
       dragging={interactive}
       doubleClickZoom={interactive}
-      attributionControl
+      attributionControl={false}
       style={{ width: '100%', height: '100%' }}
     >
+      <AttributionControl position="bottomright" prefix={false} />
       <TileLayer key={theme} url={theme === 'dark' ? TILES.dark : TILES.light} attribution={ATTR} />
       <FitBounds points={points} />
       <Resizer />

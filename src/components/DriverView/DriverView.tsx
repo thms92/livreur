@@ -1,5 +1,4 @@
 import { Fragment, type CSSProperties } from 'react'
-import { DRIVERS } from '../../data/drivers'
 import { PhoneMap } from '../map/PhoneMap'
 import { IcoCheck, IcoLink } from '../icons'
 import { DriverPills } from './DriverPills'
@@ -8,8 +7,8 @@ import { StopList } from './StopList'
 import { useLivreur } from '../../state/LivreurContext'
 
 export function DriverView() {
-  const { routes, selected, setSelected, progress, advance, resetTour } = useLivreur()
-  const driver = DRIVERS.find((d) => d.id === selected) ?? DRIVERS[0]
+  const { drivers, routes, selected, setSelected, progress, advance, resetTour } = useLivreur()
+  const driver = drivers.find((d) => d.id === selected) ?? drivers[0]
   const route = routes[driver.id]
   const arrets = route.stops
   const total = arrets.length
@@ -21,7 +20,7 @@ export function DriverView() {
 
   return (
     <div className="driver-screen">
-      <DriverPills driver={driver} routes={routes} setSelected={setSelected} />
+      <DriverPills drivers={drivers} driver={driver} routes={routes} setSelected={setSelected} />
 
       <div className="phone" style={{ '--col': driver.couleur } as CSSProperties}>
         <div className="phone-status">
