@@ -5,16 +5,16 @@ import { usePersistentState } from './usePersistentState'
 describe('usePersistentState', () => {
   beforeEach(() => localStorage.clear())
 
-  it('utilise la valeur par défaut puis la persiste sous livreur:', () => {
+  it('utilise la valeur par défaut puis la persiste sous livreur:v2:', () => {
     const { result } = renderHook(() => usePersistentState('screen', 'dispatch'))
     expect(result.current[0]).toBe('dispatch')
     act(() => result.current[1]('driver'))
     expect(result.current[0]).toBe('driver')
-    expect(localStorage.getItem('livreur:screen')).toBe('"driver"')
+    expect(localStorage.getItem('livreur:v2:screen')).toBe('"driver"')
   })
 
   it('relit la valeur existante du localStorage', () => {
-    localStorage.setItem('livreur:count', '7')
+    localStorage.setItem('livreur:v2:count', '7')
     const { result } = renderHook(() => usePersistentState('count', 0))
     expect(result.current[0]).toBe(7)
   })

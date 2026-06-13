@@ -1,6 +1,6 @@
 import { useEffect, useState, type Dispatch, type SetStateAction } from 'react'
 
-const PREFIX = 'livreur:'
+const PREFIX = 'livreur:v2:'
 
 function read<T>(key: string, fallback: T): T {
   try {
