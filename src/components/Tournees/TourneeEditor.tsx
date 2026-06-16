@@ -49,14 +49,14 @@ export function TourneeEditor({ tourneeId, onClose }: Props) {
               ))}
             </select>
           </div>
-          <div className="field">
+          <label className="field">
             <span>Date</span>
             <input
               type="date"
               value={tournee.date}
               onChange={(e) => updateTournee(tournee.id, { date: e.target.value })}
             />
-          </div>
+          </label>
         </div>
 
         <div className="field">
