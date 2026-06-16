@@ -1,39 +1,43 @@
-export type DriverId = string
-export type ScreenId = 'dispatch' | 'driver'
 export type Theme = 'light' | 'dark'
+export type Section = 'livreurs' | 'tournees' | 'chauffeurs'
 
 export interface LatLng {
   lat: number
   lng: number
 }
 
+export interface Livreur {
+  id: string
+  nom: string
+  prenom: string
+  telephone: string
+  colorIndex: number
+}
+
+/** Un arrêt-client d'une tournée (le dépôt n'est jamais stocké ici). */
 export interface Stop {
   id: string
-  driver: DriverId | null
-  order?: number
   label: string
   ville: string
   lat: number
   lng: number
 }
 
-export interface DriverConfig {
-  id: DriverId
-  nom: string
-  colorIndex: number
-}
-
-export interface Driver extends DriverConfig {
-  couleur: string
-}
-
 export interface RouteResult {
-  stops: Stop[]
-  km: string
-  min: string
+  km: number
+  min: number
+  geometry: [number, number][] // polyligne [lat, lng]
+  optimized: boolean // ordre venu d'OSRM /trip
+  approximate: boolean // calcul de repli haversine (OSRM injoignable)
 }
 
-export type Routes = Record<DriverId, RouteResult>
+export interface Tournee {
+  id: string
+  livreurId: string
+  date: string // "YYYY-MM-DD"
+  stops: Stop[] // ordre = ordre de visite des clients
+  route?: RouteResult
+}
 
 export interface Suggestion {
   id: string
