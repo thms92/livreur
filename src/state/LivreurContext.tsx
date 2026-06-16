@@ -49,6 +49,7 @@ export interface LivreurState {
 
 const Ctx = createContext<LivreurState | null>(null)
 
+// eslint-disable-next-line react-refresh/only-export-components -- hook colocalisé avec son provider (pattern context)
 export function useLivreur(): LivreurState {
   const v = useContext(Ctx)
   if (!v) throw new Error('useLivreur doit être utilisé dans <LivreurProvider>')

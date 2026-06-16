@@ -14,6 +14,7 @@ export function useAddressAutocomplete(provider: AddressProvider) {
   useEffect(() => {
     const q = query.trim()
     if (q.length < 3) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset synchrone quand la requête est trop courte
       setSuggestions([])
       setLoading(false)
       return
