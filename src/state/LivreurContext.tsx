@@ -15,6 +15,11 @@ import { usePersistentState } from './usePersistentState'
 
 const defaultProvider = new BanProvider()
 
+/** Signature ordonnée des arrêts (ids) pour détecter un changement pendant un appel réseau. */
+function stopSignature(stops: Stop[]): string {
+  return stops.map((s) => s.id).join(',')
+}
+
 export interface LivreurInput {
   nom: string
   prenom: string
@@ -190,9 +195,15 @@ export function LivreurProvider({
     async (tourneeId: string) => {
       const t = tournees.find((x) => x.id === tourneeId)
       if (!t) return
+      const snapshot = stopSignature(t.stops)
       const { order, route } = await optimizeTrip(t.stops)
       const stops = order.map((i) => t.stops[i])
-      setTournees((prev) => prev.map((x) => (x.id === tourneeId ? { ...x, stops, route } : x)))
+      // Ignore le résultat si les arrêts ont changé pendant l'appel réseau (anti écrasement).
+      setTournees((prev) =>
+        prev.map((x) =>
+          x.id === tourneeId && stopSignature(x.stops) === snapshot ? { ...x, stops, route } : x,
+        ),
+      )
     },
     [tournees, setTournees],
   )
@@ -201,8 +212,14 @@ export function LivreurProvider({
     async (tourneeId: string) => {
       const t = tournees.find((x) => x.id === tourneeId)
       if (!t) return
+      const snapshot = stopSignature(t.stops)
       const route = await computeRoute(t.stops)
-      setTournees((prev) => prev.map((x) => (x.id === tourneeId ? { ...x, route } : x)))
+      // Ignore un résultat obsolète si les arrêts ont changé entre-temps (appels concurrents).
+      setTournees((prev) =>
+        prev.map((x) =>
+          x.id === tourneeId && stopSignature(x.stops) === snapshot ? { ...x, route } : x,
+        ),
+      )
     },
     [tournees, setTournees],
   )

@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { Marker, Polyline } from 'react-leaflet'
 import type { LatLng, RouteResult, Stop } from '../../types'
 import { DEPOT } from '../../data/depot'
@@ -16,10 +17,16 @@ interface Props {
 }
 
 export function TourneeMap({ tournees }: Props) {
-  const points: LatLng[] = [
-    { lat: DEPOT.lat, lng: DEPOT.lng },
-    ...tournees.flatMap((t) => t.stops),
-  ]
+  // Référence stable tant que les coordonnées ne changent pas : évite que la carte
+  // ne se recadre (fitBounds) à chaque re-rendu (ex. saisie dans le formulaire).
+  const coordKey = tournees
+    .flatMap((t) => t.stops.map((s) => `${s.lat},${s.lng}`))
+    .join('|')
+  const points: LatLng[] = useMemo(
+    () => [{ lat: DEPOT.lat, lng: DEPOT.lng }, ...tournees.flatMap((t) => t.stops)],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- recalcule uniquement quand les coordonnées changent
+    [coordKey],
+  )
   return (
     <div className="map-wrap">
       <BaseMap points={points}>
