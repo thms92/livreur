@@ -2,6 +2,7 @@ import { useEffect, type ReactNode } from 'react'
 import { MapContainer, TileLayer, AttributionControl, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import { useLivreur } from '../../state/LivreurContext'
+import { DEPOT } from '../../data/depot'
 import type { LatLng } from '../../types'
 
 const TILES = {
@@ -39,7 +40,7 @@ export function BaseMap({ points, interactive = true, children }: Props) {
   const { theme } = useLivreur()
   const center: [number, number] = points.length
     ? [points[0].lat, points[0].lng]
-    : [48.81, 2.29]
+    : [DEPOT.lat, DEPOT.lng]
   return (
     <MapContainer
       center={center}
