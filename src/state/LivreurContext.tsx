@@ -4,7 +4,6 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useState,
   type ReactNode,
 } from 'react'
 import type { Livreur, Section, Stop, Suggestion, Theme, Tournee } from '../types'
