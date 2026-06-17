@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react'
+import { useId, useState } from 'react'
 import type { AddressProvider } from '../services/addressProvider'
 import type { Suggestion } from '../types'
 import { useAddressAutocomplete } from './useAddressAutocomplete'
@@ -31,11 +31,6 @@ export function AddressAutocomplete({ provider, onPick, saved = [], onRemoveSave
     ...savedMatches.map((a) => ({ s: a, saved: true })),
     ...suggestions.filter((s) => !savedIds.has(s.id)).map((s) => ({ s, saved: false })),
   ]
-
-  // remet la sélection en tête quand la requête change
-  useEffect(() => {
-    setActive(0)
-  }, [query])
 
   function pick(s: Suggestion) {
     onPick(s)
@@ -77,6 +72,7 @@ export function AddressAutocomplete({ provider, onPick, saved = [], onRemoveSave
           autoComplete="off"
           onChange={(e) => {
             setQuery(e.target.value)
+            setActive(0)
             setOpen(true)
           }}
           onKeyDown={onKeyDown}

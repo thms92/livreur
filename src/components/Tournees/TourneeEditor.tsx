@@ -3,6 +3,7 @@ import { useLivreur } from '../../state/LivreurContext'
 import { AddressAutocomplete } from '../AddressAutocomplete'
 import { TourneeMap } from '../map/TourneeMap'
 import { StopList } from './StopList'
+import { printTourneeSheet } from '../../services/printSheet'
 
 interface Props {
   tourneeId: string
@@ -14,6 +15,8 @@ export function TourneeEditor({ tourneeId, onClose }: Props) {
     livreurs,
     tournees,
     provider,
+    adresses,
+    removeAdresse,
     updateTournee,
     addStopToTournee,
     removeStopFromTournee,
@@ -72,6 +75,8 @@ export function TourneeEditor({ tourneeId, onClose }: Props) {
           <span>Ajouter un arrêt</span>
           <AddressAutocomplete
             provider={provider}
+            saved={adresses}
+            onRemoveSaved={removeAdresse}
             onPick={(s) => {
               pendingRef.current = 'optimize'
               addStopToTournee(tournee.id, s)
@@ -94,6 +99,9 @@ export function TourneeEditor({ tourneeId, onClose }: Props) {
         <div className="editor-footer">
           <button className="btn-ghost" onClick={() => optimizeTournee(tournee.id)}>
             Ré-optimiser
+          </button>
+          <button className="btn-ghost" onClick={() => printTourneeSheet(tournee, livreur)}>
+            Imprimer
           </button>
           <span className="total">
             {tournee.route

@@ -108,7 +108,9 @@ button { font-family: inherit; cursor: pointer; }
 .chauffeur-card { border-left: 4px solid var(--c-1); border-radius: 8px; padding: 12px 14px; background: rgba(128, 128, 128, 0.08); }
 .chauffeur-head { display: flex; align-items: center; gap: 10px; }
 .chauffeur-stats { margin-left: auto; font-weight: 700; }
-.chauffeur-trip { margin-top: 8px; opacity: 0.85; font-size: 13px; }
+.chauffeur-trip { margin-top: 8px; opacity: 0.85; font-size: 13px; display: flex; align-items: center; gap: 10px; }
+.chauffeur-trip-line { flex: 1; }
+.btn-print { padding: 4px 10px; font-size: 13px; }
 
 /* ----------------------------------------------------------------
    Bouton icône (bascule thème sidebar)
@@ -167,6 +169,12 @@ button { font-family: inherit; cursor: pointer; }
 .ac-text { min-width: 0; display: flex; flex-direction: column; }
 .ac-label { font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ac-ville { font-size: 11.5px; color: var(--text-3); }
+.ac-item.saved .ac-ico { color: #e0a400; }
+.ac-remove {
+  margin-left: auto; border: 0; background: transparent; cursor: pointer;
+  opacity: 0.55; font-size: 13px; padding: 2px 6px; color: var(--text-2);
+}
+.ac-remove:hover { opacity: 1; }
 
 /* ----------------------------------------------------------------
    Marqueurs Leaflet (divIcon) & branding
