@@ -3,6 +3,7 @@ import { Sidebar } from './components/layout/Sidebar'
 import { LivreursSection } from './components/Livreurs/LivreursSection'
 import { TourneesSection } from './components/Tournees/TourneesSection'
 import { ChauffeursSection } from './components/Chauffeurs/ChauffeursSection'
+import { HistoriqueSection } from './components/Historique/HistoriqueSection'
 
 function Shell() {
   const { section, loading, error, dismissError } = useLivreur()
@@ -20,6 +21,7 @@ function Shell() {
         {section === 'livreurs' && <LivreursSection />}
         {section === 'tournees' && <TourneesSection />}
         {section === 'chauffeurs' && <ChauffeursSection />}
+        {section === 'historique' && <HistoriqueSection />}
       </main>
     </div>
   )

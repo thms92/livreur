@@ -1,5 +1,5 @@
 export type Theme = 'light' | 'dark'
-export type Section = 'livreurs' | 'tournees' | 'chauffeurs'
+export type Section = 'livreurs' | 'tournees' | 'chauffeurs' | 'historique'
 
 export interface LatLng {
   lat: number
