@@ -9,7 +9,7 @@ données centralisée** afin que les données (livreurs, tournées, carnet d'adr
 ## Contexte / existant
 
 - App React 19 + Vite + TS, déployée sur **Cloudflare Pages** (`livreur-7bf.pages.dev`), code sur
-  GitHub `thms92/livreur`. Déploiement possible via Wrangler (authentifié en local).
+  GitHub `thms92/livreur`. Déploiement via Wrangler (authentifié en local).
 - État global dans `src/state/LivreurContext.tsx`, persisté via `usePersistentState`
   (`localStorage`, préfixe `livreur:v3:`), clés `livreurs`, `tournees`, `adresses`, `theme`,
   `section`.
@@ -21,7 +21,8 @@ données centralisée** afin que les données (livreurs, tournées, carnet d'adr
 
 ## Décisions (validées)
 
-- **Accès** : un **mot de passe unique partagé** (pas de comptes individuels).
+- **Accès** : **aucune authentification** — l'URL publique donne accès total en lecture/écriture.
+  Choix assumé par l'utilisateur pour cet usage interne limité (compromis simplicité > protection).
 - **Plateforme** : **Cloudflare D1** (SQLite) + **Pages Functions**, dans le même projet Pages.
 - **Migration** : **repartir à vide** (les données localStorage de test sont abandonnées).
 - **En ligne requis** : pas de mode hors-ligne ; message clair si le réseau manque.
@@ -40,25 +41,9 @@ Navigateur (React)  ──HTTPS──>  /api/*  (Pages Functions)  ──>  D1 (
   le même domaine que le site. L'API est sous `/api/*`.
 - **D1** est lié au projet via le binding `DB` (déclaré dans `wrangler.toml` et dans les réglages
   Pages). Accès depuis les Functions via `context.env.DB`.
+- **Pas d'authentification** : aucune route protégée, aucun jeton, aucun secret de mot de passe.
 
-## 2. Authentification (mot de passe partagé)
-
-- Secret **`APP_PASSWORD`** : le mot de passe (secret Cloudflare, jamais dans le code/git).
-- Secret **`AUTH_SECRET`** : clé de signature des jetons (secret Cloudflare).
-- `POST /api/login` `{ password }` :
-  - comparaison à `APP_PASSWORD` en **temps constant** ;
-  - si OK → renvoie `{ token }` où `token = base64url(payload).signature`, `payload = { exp }`
-    (expiration, ex. +30 jours), `signature = HMAC-SHA256(payload, AUTH_SECRET)` via Web Crypto ;
-  - si KO → `401`.
-- Middleware `functions/api/_middleware.ts` : protège tous les `/api/*` **sauf** `/api/login`.
-  Lit l'en-tête `Authorization: Bearer <token>`, vérifie la signature HMAC et l'expiration ; sinon
-  `401`.
-- **Front** : écran de connexion tant qu'aucun jeton valide. Le jeton est stocké en `localStorage`
-  (clé `livreur:auth`) et envoyé sur chaque appel. Un `401` efface le jeton → retour connexion.
-- HTTPS partout (Cloudflare). Modèle de menace : petit outil interne, mot de passe partagé — ce
-  niveau est adapté.
-
-## 3. Schéma D1 (`migrations/0001_init.sql`)
+## 2. Schéma D1 (`migrations/0001_init.sql`)
 
 ```sql
 CREATE TABLE livreurs (
@@ -94,18 +79,17 @@ CREATE TABLE adresses (
   comme aujourd'hui — pas de table `stops` séparée (YAGNI à cette échelle).
 - Base **mono-locataire** : pas de table utilisateur, pas de colonne tenant.
 
-## 4. API (Pages Functions, sous `functions/api/`)
+## 3. API (Pages Functions, sous `functions/api/`)
 
-Toutes les réponses en JSON ; toutes protégées par le jeton sauf `login`.
+Toutes les réponses en JSON. Aucune authentification.
 
 | Méthode & route            | Effet |
 |----------------------------|-------|
-| `POST /api/login`          | Valide le mot de passe, renvoie `{ token }`. |
 | `GET  /api/state`          | Renvoie `{ livreurs, tournees, adresses }` (tout le jeu de données). |
 | `POST /api/livreurs`       | Crée un livreur (corps : `{nom,prenom,telephone}`) ; renvoie le livreur créé (id + color_index calculés serveur). |
 | `PUT  /api/livreurs/:id`   | Met à jour (`{nom?,prenom?,telephone?}`). |
 | `DELETE /api/livreurs/:id` | Supprime le livreur **et ses tournées** (cascade applicative). |
-| `POST /api/tournees`       | Crée une tournée (`{livreurId,date}`). |
+| `POST /api/tournees`       | Crée une tournée (`{livreurId,date}`) ; renvoie la tournée créée. |
 | `PUT  /api/tournees/:id`   | Met à jour (`{livreurId?,date?,stops?,route?}`). |
 | `DELETE /api/tournees/:id` | Supprime la tournée. |
 | `POST /api/adresses`       | Upsert d'une adresse du carnet (dédup par `id`). |
@@ -116,55 +100,53 @@ Toutes les réponses en JSON ; toutes protégées par le jeton sauf `login`.
   DRY et testable.
 - La **couleur** (`color_index`) d'un nouveau livreur est calculée **côté serveur** (plus petit
   index libre) pour éviter les collisions entre utilisateurs.
+- Erreurs : `404` si id inconnu, `400` si corps invalide, `500` en cas d'erreur DB ; corps
+  `{ error: string }`.
 
-## 5. Front : ce qui change
+## 4. Front : ce qui change
 
-- **Nouveau module** `src/services/api.ts` : client typé (login, getState, CRUD). Ajoute le jeton,
-  gère les `401` (efface le jeton + déclenche la reconnexion), parse les erreurs.
+- **Nouveau module** `src/services/api.ts` : client typé (`getState`, CRUD livreurs/tournées/
+  adresses). Construit les requêtes, parse les réponses et les erreurs.
 - **`LivreurContext` rewiré** :
-  - au montage (après authentification), `getState()` remplit `livreurs`/`tournees`/`adresses` ;
+  - au montage, `getState()` remplit `livreurs`/`tournees`/`adresses` (état de chargement affiché) ;
   - chaque action devient **asynchrone** : mise à jour **optimiste** locale immédiate, puis appel
     API ; en cas d'échec → **rollback** de l'état + message d'erreur ;
-  - `usePersistentState` n'est plus utilisé pour les données métier (on garde localStorage
-    seulement pour `theme`, `section`, et le jeton d'auth).
-- **Écran de connexion** `src/components/Auth/LoginGate.tsx` : champ mot de passe → `login()` →
-  stocke le jeton → charge l'app. Affiché tant que non authentifié ; `App` n'affiche les sections
-  qu'une fois connecté et l'état chargé (avec un état de chargement).
-- **Erreurs réseau** : un petit bandeau/notification réutilisable signale un échec d'enregistrement
-  ou une perte de réseau.
+  - `usePersistentState` n'est plus utilisé pour les données métier (on le garde seulement pour
+    `theme` et `section`, qui restent des préférences locales au navigateur).
+- **`App`** : affiche un état « Chargement… » tant que `getState` n'a pas répondu, puis les sections.
+  Pas d'écran de connexion.
+- **Erreurs réseau** : une petite notification réutilisable signale un échec d'enregistrement ou une
+  perte de réseau (et invite à réessayer / recharger).
 
-## 6. Infra & déploiement (exécuté via Wrangler par l'assistant)
+## 5. Infra & déploiement (exécuté via Wrangler par l'assistant)
 
 - `wrangler d1 create livreur-db` → récupère l'`database_id`.
-- `wrangler.toml` : déclare le binding `DB` (+ section `[[d1_databases]]`) et le dossier
-  `pages_build_output_dir = "dist"`.
-- Migration appliquée via `wrangler d1 execute livreur-db --file migrations/0001_init.sql`
-  (en local pour les tests, et en remote pour la prod).
-- Secrets en prod : `wrangler pages secret put APP_PASSWORD` et `... AUTH_SECRET` (le mot de passe
-  est choisi par l'utilisateur ; `AUTH_SECRET` généré aléatoirement).
+- `wrangler.toml` : déclare `pages_build_output_dir = "dist"` et le binding D1
+  (`[[d1_databases]]` avec `binding = "DB"`).
+- Migration : `wrangler d1 execute livreur-db --file migrations/0001_init.sql`
+  (en local pour les tests, et `--remote` pour la prod).
 - Dev local : `wrangler pages dev` (sert le build + Functions + D1 locale).
-- Déploiement : `npm run build` puis `wrangler pages deploy dist` (la prod ré-applique la migration
-  une fois). Le déploiement Git auto reste optionnel.
+- Déploiement : `npm run build` puis `wrangler pages deploy dist`. Le déploiement Git auto reste
+  optionnel.
+- **Aucun secret** à configurer (pas d'auth).
 
-## 7. Tests
+## 6. Tests
 
-- **API (Functions)** — testées avec une **D1 locale** (Miniflare/`wrangler`) ou un faux `DB`
-  implémentant `prepare/bind/all/run` :
-  - `login` : bon mot de passe → jeton ; mauvais → 401.
-  - middleware : jeton absent/invalide/expiré → 401 ; valide → passe.
-  - livreurs : create (color_index auto), update, delete + **cascade** des tournées.
-  - tournees : create, update (stops/route), delete.
-  - adresses : upsert (dédup id), delete.
-  - `state` : renvoie bien les trois collections.
+- **API (Functions)** — testées avec un faux `DB` implémentant `prepare/bind/all/run` (ou une D1
+  locale Miniflare) :
+  - livreurs : create (color_index auto = plus petit libre), update, delete + **cascade** tournées.
+  - tournees : create, update (stops/route sérialisés), delete.
+  - adresses : upsert (dédup par id), delete.
+  - `state` : renvoie bien les trois collections, avec `stops`/`route` désérialisés.
+  - erreurs : 404 sur id inconnu, 400 sur corps invalide.
 - **Front** :
-  - `services/api.ts` : ajoute le Bearer, sérialise/désérialise, gère 401 (fetch mocké).
+  - `services/api.ts` : construit les requêtes, parse réponses/erreurs (fetch mocké).
   - `LivreurContext` : chargement initial via `getState`, mise à jour optimiste, **rollback** sur
     échec API (api mocké).
-  - `LoginGate` : mauvais mot de passe → message ; bon → app chargée.
 
 ## Hors périmètre (YAGNI)
 
-- Comptes individuels, rôles/permissions.
+- Authentification / comptes / rôles (choix : aucune protection).
 - Synchronisation temps réel / websockets (rechargement manuel suffit à cette échelle).
 - Mode hors-ligne complet / file d'attente de synchronisation.
 - Historique / versions / corbeille.
