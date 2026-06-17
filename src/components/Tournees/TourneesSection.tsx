@@ -11,13 +11,13 @@ export function TourneesSection() {
 
   if (editing) return <TourneeEditor tourneeId={editing} onClose={() => setEditing(null)} />
 
-  function create() {
+  async function create() {
     if (!livreurs.length) {
       alert("Ajoutez d'abord un livreur dans la section Livreurs.")
       return
     }
-    const id = addTournee({ livreurId: livreurs[0].id, date: today() })
-    setEditing(id)
+    const id = await addTournee({ livreurId: livreurs[0].id, date: today() })
+    if (id) setEditing(id)
   }
 
   return (

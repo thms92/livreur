@@ -12,21 +12,38 @@ vi.mock('react-leaflet', () => ({
   useMap: () => ({ fitBounds: () => {}, invalidateSize: () => {} }),
 }))
 
+vi.mock('./services/api', () => ({
+  api: {
+    getState: vi.fn(async () => ({ livreurs: [], tournees: [], adresses: [] })),
+    createLivreur: vi.fn(async (i: { nom: string; prenom: string; telephone: string }) => ({
+      id: 'L1', ...i, colorIndex: 0,
+    })),
+    updateLivreur: vi.fn(async () => ({ ok: true })),
+    deleteLivreur: vi.fn(async () => ({ ok: true })),
+    createTournee: vi.fn(async (i: { livreurId: string; date: string }) => ({ id: 'T1', ...i, stops: [] })),
+    updateTournee: vi.fn(async () => ({ ok: true })),
+    deleteTournee: vi.fn(async () => ({ ok: true })),
+    upsertAdresse: vi.fn(async () => ({ ok: true })),
+    deleteAdresse: vi.fn(async () => ({ ok: true })),
+  },
+}))
+
 afterEach(() => localStorage.clear())
 
 describe('App (smoke)', () => {
   it('créer un livreur → créer une tournée → le retrouver dans Chauffeurs', async () => {
     render(<App />)
 
-    await userEvent.click(screen.getByRole('button', { name: /Livreurs/ }))
+    // attendre la fin du chargement initial (getState)
+    await userEvent.click(await screen.findByRole('button', { name: /Livreurs/ }))
     await userEvent.type(screen.getByLabelText('Nom'), 'Benali')
     await userEvent.type(screen.getByLabelText('Prénom'), 'Karim')
     await userEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
-    expect(screen.getByText('Karim Benali')).toBeInTheDocument()
+    expect(await screen.findByText('Karim Benali')).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: /Tournées/ }))
     await userEvent.click(screen.getByRole('button', { name: 'Nouvelle tournée' }))
-    expect(screen.getByText(/Ajouter un arrêt/)).toBeInTheDocument()
+    expect(await screen.findByText(/Ajouter un arrêt/)).toBeInTheDocument()
 
     const dateInput = screen.getByLabelText('Date') as HTMLInputElement
     await userEvent.clear(dateInput)
@@ -34,7 +51,7 @@ describe('App (smoke)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Enregistrer la tournée' }))
 
     await userEvent.click(screen.getByRole('button', { name: /Chauffeurs/ }))
-    // le sélecteur de date se cale par défaut sur la (seule) date ayant une tournée
-    expect(screen.getByText('Karim Benali')).toBeInTheDocument()
+    // la date par défaut se cale sur la seule date ayant une tournée
+    expect(await screen.findByText('Karim Benali')).toBeInTheDocument()
   })
 })
