@@ -28,6 +28,9 @@ données centralisée** afin que les données (livreurs, tournées, carnet d'adr
 - **En ligne requis** : pas de mode hors-ligne ; message clair si le réseau manque.
 - **Concurrence** : **dernier qui écrit gagne**, pas de temps réel (3–4 utilisateurs max → suffisant).
   Les modifications d'autrui apparaissent au rechargement.
+- **Historique** : une tournée bascule **automatiquement** dans l'historique quand sa **date est
+  passée** (antérieure à aujourd'hui). Une **section « Historique » dédiée** (lecture seule +
+  réimpression) la liste ; la section **Tournées** n'affiche plus que le **jour même et l'à‑venir**.
 
 ## 1. Architecture
 
@@ -118,6 +121,19 @@ Toutes les réponses en JSON. Aucune authentification.
 - **Erreurs réseau** : une petite notification réutilisable signale un échec d'enregistrement ou une
   perte de réseau (et invite à réessayer / recharger).
 
+### Historique (front uniquement — le modèle de données ne change pas)
+
+- Le type `Section` gagne une valeur `historique` ; la **barre latérale** a une 4e entrée
+  « Historique ».
+- Découpage par date (comparaison à la date du jour `YYYY-MM-DD`) :
+  - **Tournées** : n'affiche que les tournées dont `date >= aujourd'hui` (jour même + à venir).
+  - **Historique** : `src/components/Historique/HistoriqueSection.tsx` — liste les tournées dont
+    `date < aujourd'hui`, **groupées par date décroissante**, en **lecture seule** (livreur, nb
+    d'arrêts, km/min) avec un bouton **Imprimer** (réutilise `printTourneeSheet`). Pas de
+    modification ni de suppression ici (consultation/archive).
+- Le calcul « passé vs à venir » est une petite fonction pure réutilisable (`isPast(date)` /
+  partition), testable indépendamment.
+
 ## 5. Infra & déploiement (exécuté via Wrangler par l'assistant)
 
 - `wrangler d1 create livreur-db` → récupère l'`database_id`.
@@ -143,11 +159,16 @@ Toutes les réponses en JSON. Aucune authentification.
   - `services/api.ts` : construit les requêtes, parse réponses/erreurs (fetch mocké).
   - `LivreurContext` : chargement initial via `getState`, mise à jour optimiste, **rollback** sur
     échec API (api mocké).
+  - partition passé/à‑venir : `isPast`/partition des tournées par rapport à la date du jour.
+  - `HistoriqueSection` : n'affiche que les tournées passées, groupées par date, avec Imprimer ;
+    `TourneesSection` : n'affiche que jour + à venir.
 
 ## Hors périmètre (YAGNI)
 
 - Authentification / comptes / rôles (choix : aucune protection).
 - Synchronisation temps réel / websockets (rechargement manuel suffit à cette échelle).
 - Mode hors-ligne complet / file d'attente de synchronisation.
-- Historique / versions / corbeille.
+- Historique fin des **modifications** d'une tournée (versions), corbeille (l'historique ici =
+  consultation des tournées passées, pas un suivi de versions).
+- Édition/suppression depuis l'historique (lecture seule assumée).
 - Pagination (volumes faibles).
