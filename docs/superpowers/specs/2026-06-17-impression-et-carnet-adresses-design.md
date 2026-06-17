@@ -32,8 +32,10 @@ gestionnaire only, localStorage, OSRM/BAN) :
   correspondantes s'affichent **en tête** (marquées ★), puis les suggestions BAN.
 - **Suppression** d'une entrée du carnet : petit **✕** sur l'entrée enregistrée dans la liste
   d'autocomplétion (pas de section de gestion).
-- **Impression** : **feuille texte seule** (pas de carte), claire, 1 page N&B. Bouton dans
-  **l'éditeur de tournée** ET sur chaque tournée de la **section Chauffeurs**.
+- **Impression** : feuille claire (en‑tête + liste ordonnée) **avec une carte** reconstruite dans
+  la fenêtre d'impression (Leaflet via CDN, tuiles CARTO + tracé OSRM + points numérotés ;
+  ajout demandé après coup — internet requis au moment d'imprimer). Bouton dans **l'éditeur de
+  tournée** ET sur chaque tournée de la **section Chauffeurs**.
 - **Technique impression** : fenêtre d'impression **isolée** (`window.open` + HTML autonome +
   `window.print()`), pas de CSS d'impression global → aucun conflit avec l'UI.
 

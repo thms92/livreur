@@ -59,4 +59,14 @@ describe('buildSheetHtml', () => {
     expect(html).not.toContain('<script>x')
     expect(html).toContain('&lt;script&gt;x')
   })
+
+  it('intègre une carte Leaflet avec le dépôt, les arrêts et le tracé', () => {
+    const html = buildSheetHtml(tournee, livreur)
+    expect(html).toContain('id="map"')
+    expect(html).toContain('leaflet')
+    expect(html).toContain('48.312002') // latitude du dépôt
+    expect(html).toContain('window.print') // impression déclenchée après rendu carte
+    // les coordonnées des arrêts sont injectées pour les marqueurs
+    expect(html).toContain('"lat":48')
+  })
 })
