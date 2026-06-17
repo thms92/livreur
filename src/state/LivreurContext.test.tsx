@@ -109,3 +109,28 @@ describe('LivreurContext — tournées', () => {
     expect(result.current.tournees).toEqual([])
   })
 })
+
+describe('LivreurContext — carnet d’adresses', () => {
+  it('mémorise automatiquement l’adresse ajoutée (dédup par id)', () => {
+    const { result } = renderHook(() => useLivreur(), { wrapper })
+    act(() => result.current.addLivreur({ nom: 'B', prenom: 'K', telephone: '' }))
+    let tid = ''
+    act(() => { tid = result.current.addTournee({ livreurId: result.current.livreurs[0].id, date: '2026-06-18' }) })
+    const a = { id: 'ban-1', label: '12 Rue des Lilas', ville: 'Chartres', lat: 48, lng: 1 }
+    act(() => result.current.addStopToTournee(tid, a))
+    act(() => result.current.addStopToTournee(tid, a)) // même adresse → pas de doublon
+    expect(result.current.adresses).toHaveLength(1)
+    expect(result.current.adresses[0]).toMatchObject({ id: 'ban-1', label: '12 Rue des Lilas', ville: 'Chartres' })
+  })
+
+  it('removeAdresse retire l’entrée du carnet', () => {
+    const { result } = renderHook(() => useLivreur(), { wrapper })
+    act(() => result.current.addLivreur({ nom: 'B', prenom: 'K', telephone: '' }))
+    let tid = ''
+    act(() => { tid = result.current.addTournee({ livreurId: result.current.livreurs[0].id, date: '2026-06-18' }) })
+    act(() => result.current.addStopToTournee(tid, { id: 'ban-9', label: 'X', ville: 'Y', lat: 0, lng: 0 }))
+    expect(result.current.adresses).toHaveLength(1)
+    act(() => result.current.removeAdresse('ban-9'))
+    expect(result.current.adresses).toEqual([])
+  })
+})

@@ -33,6 +33,7 @@ export interface LivreurState {
   section: Section
   livreurs: LivreurWithColor[]
   tournees: Tournee[]
+  adresses: Suggestion[]
   provider: AddressProvider
   reduceMotion: boolean
   toggleTheme: () => void
@@ -50,6 +51,8 @@ export interface LivreurState {
   reorderStops: (tourneeId: string, from: number, to: number) => void
   optimizeTournee: (tourneeId: string) => Promise<void>
   refreshRoute: (tourneeId: string) => Promise<void>
+  // carnet d'adresses
+  removeAdresse: (id: string) => void
 }
 
 const Ctx = createContext<LivreurState | null>(null)
@@ -72,6 +75,7 @@ export function LivreurProvider({
   const [section, setSection] = usePersistentState<Section>('section', 'tournees')
   const [livreursRaw, setLivreurs] = usePersistentState<Livreur[]>('livreurs', [])
   const [tournees, setTournees] = usePersistentState<Tournee[]>('tournees', [])
+  const [adresses, setAdresses] = usePersistentState<Suggestion[]>('adresses', [])
 
   const reduceMotion =
     typeof window !== 'undefined' &&
@@ -161,8 +165,13 @@ export function LivreurProvider({
       setTournees((prev) =>
         prev.map((t) => (t.id === tourneeId ? { ...t, stops: [...t.stops, stop], route: undefined } : t)),
       )
+      setAdresses((prev) =>
+        prev.some((a) => a.id === s.id)
+          ? prev
+          : [...prev, { id: s.id, label: s.label, ville: s.ville, lat: s.lat, lng: s.lng }],
+      )
     },
-    [setTournees],
+    [setTournees, setAdresses],
   )
 
   const removeStopFromTournee = useCallback(
@@ -224,11 +233,17 @@ export function LivreurProvider({
     [tournees, setTournees],
   )
 
+  const removeAdresse = useCallback(
+    (id: string) => setAdresses((prev) => prev.filter((a) => a.id !== id)),
+    [setAdresses],
+  )
+
   const value: LivreurState = {
     theme,
     section,
     livreurs,
     tournees,
+    adresses,
     provider,
     reduceMotion: !!reduceMotion,
     toggleTheme,
@@ -244,6 +259,7 @@ export function LivreurProvider({
     reorderStops,
     optimizeTournee,
     refreshRoute,
+    removeAdresse,
   }
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }
