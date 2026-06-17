@@ -34,9 +34,24 @@ window.addEventListener('load', function () {
   var stops = ${JSON.stringify(stops)};
   var line = ${JSON.stringify(geometry)};
   var printed = false;
-  function go() { if (printed) return; printed = true; setTimeout(function () { window.print(); }, 350); }
+  var bounds = null;
+  function fit() {
+    if (!window.__map) return;
+    try {
+      window.__map.invalidateSize();
+      if (bounds && bounds.isValid()) window.__map.fitBounds(bounds, { padding: [24, 24] });
+      else window.__map.setView(depot, 11);
+    } catch (e) { /* ignore */ }
+  }
+  function go() {
+    if (printed) return;
+    printed = true;
+    fit();
+    setTimeout(function () { window.print(); }, 450);
+  }
   try {
     var map = L.map('map', { zoomControl: false, attributionControl: true });
+    window.__map = map;
     var tiles = L.tileLayer('${TILES}', { maxZoom: 19 });
     tiles.on('load', go);
     tiles.addTo(map);
@@ -52,9 +67,11 @@ window.addEventListener('load', function () {
     } else {
       L.polyline([depot].concat(stops.map(function (s) { return [s.lat, s.lng]; })).concat([depot]), { color: '#1f6feb', weight: 3 }).addTo(map);
     }
-    map.fitBounds(L.latLngBounds(pts).pad(0.2));
+    bounds = L.latLngBounds(pts);
+    setTimeout(fit, 250);
+    window.addEventListener('beforeprint', fit);
   } catch (e) { /* hors-ligne : on imprime sans carte */ }
-  setTimeout(go, 2000);
+  setTimeout(go, 2200);
 });
 </script>`
 }
