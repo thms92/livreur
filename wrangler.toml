@@ -1,0 +1,8 @@
+name = "livreur"
+compatibility_date = "2025-01-01"
+pages_build_output_dir = "dist"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "livreur-db"
+database_id = "f0fd814b-a25a-44de-8cfa-d684658c737f"

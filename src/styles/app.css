@@ -212,3 +212,12 @@ button { font-family: inherit; cursor: pointer; }
   .map-pin.pulse { animation: none !important; }
 }
 .leaflet-container { background: var(--map-bg); font-family: var(--font-ui); }
+
+/* Chargement & erreurs (backend) */
+.app-loading { display: grid; place-items: center; min-height: 100vh; color: var(--text-2); }
+.error-banner {
+  display: flex; align-items: center; gap: 12px; margin-bottom: 16px;
+  padding: 10px 14px; border-radius: 8px; background: rgba(229, 72, 77, 0.12);
+  color: #b42318; border: 1px solid rgba(229, 72, 77, 0.3);
+}
+.error-banner .btn-ghost { margin-left: auto; }

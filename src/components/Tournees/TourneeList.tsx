@@ -1,4 +1,5 @@
 import { useLivreur } from '../../state/LivreurContext'
+import { partitionTournees } from '../../lib/tourneeTime'
 
 interface Props {
   onOpen: (tourneeId: string) => void
@@ -7,9 +8,10 @@ interface Props {
 export function TourneeList({ onOpen }: Props) {
   const { tournees, livreurs, removeTournee } = useLivreur()
 
-  if (!tournees.length) return <p className="empty">Aucune tournée. Créez-en une.</p>
+  const upcoming = partitionTournees(tournees).upcoming
+  if (!upcoming.length) return <p className="empty">Aucune tournée à venir. Créez-en une.</p>
 
-  const sorted = [...tournees].sort((a, b) => b.date.localeCompare(a.date))
+  const sorted = [...upcoming].sort((a, b) => b.date.localeCompare(a.date))
 
   return (
     <ul className="tournee-list">
