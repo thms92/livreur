@@ -11,10 +11,33 @@ Trois sections (barre latérale gauche) :
 - **Tournées** — créer / modifier / supprimer une tournée : choix du livreur, date, ajout d'arrêts
   par **autocomplétion d'adresse (BAN)**. Ordre **optimisé automatiquement** (OSRM), **réordonnable
   à la main** (glisser-déposer), bouton « Ré-optimiser », total km/temps, carte de la boucle.
-- **Chauffeurs** — vue d'ensemble filtrée par date : une carte colorée par chauffeur (1 couleur = 1
-  chauffeur) avec ses tournées du jour, plus une carte commune.
+- **Chauffeurs** — vue d'ensemble filtrée par date (sélecteur ne listant que les jours ayant des
+  tournées) : une carte colorée par chauffeur (1 couleur = 1 chauffeur) avec ses tournées du jour,
+  plus une carte commune.
+- **Historique** — tournées **passées** (date antérieure à aujourd'hui), en lecture seule, avec
+  réimpression de la feuille.
 
-Mode clair/sombre. Données stockées en `localStorage` (aucun backend).
+L'impression d'une tournée produit une **feuille pour le livreur** (en‑tête + carte + liste ordonnée
+des arrêts). Mode clair/sombre.
+
+## Données — backend Cloudflare D1
+
+Les données (livreurs, tournées, carnet d'adresses) sont **centralisées** dans une base **Cloudflare
+D1** via des **Pages Functions** (`functions/api/*`, API `/api/*`), partagées entre tous les
+utilisateurs. **Aucune authentification** (accès libre par l'URL — choix assumé pour un usage interne
+restreint). Le front charge l'état au démarrage et applique des mises à jour **optimistes avec
+rollback**.
+
+Schéma : `migrations/0001_init.sql`. Configuration : `wrangler.toml` (binding `DB`).
+
+```bash
+# créer/migrer la base
+npx wrangler d1 execute livreur-db --remote --file migrations/0001_init.sql
+# déployer (build + Functions + binding D1)
+npm run build && npx wrangler pages deploy dist --project-name=livreur --branch=main
+# dev local (Functions + D1 locale)
+npx wrangler pages dev dist --d1 DB=livreur-db
+```
 
 ## Démarrer
 
@@ -22,8 +45,9 @@ Mode clair/sombre. Données stockées en `localStorage` (aucun backend).
 npm install
 npm run dev        # serveur de dev Vite
 npm run build      # build de production (tsc -b + vite build)
-npm test           # suite Vitest
+npm test           # suite Vitest (front + API via shim sqlite)
 npm run lint       # ESLint
+npx tsc -p functions/tsconfig.json   # type-check des Pages Functions
 ```
 
 ## Architecture
