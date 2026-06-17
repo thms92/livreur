@@ -1,4 +1,4 @@
-import { useId, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import type { AddressProvider } from '../services/addressProvider'
 import type { Suggestion } from '../types'
 import { useAddressAutocomplete } from './useAddressAutocomplete'
@@ -7,13 +7,35 @@ import { IcoPin, IcoPlus } from './icons'
 interface Props {
   provider: AddressProvider
   onPick: (s: Suggestion) => void
+  saved?: Suggestion[]
+  onRemoveSaved?: (id: string) => void
 }
 
-export function AddressAutocomplete({ provider, onPick }: Props) {
-  const { query, setQuery, suggestions, activeIndex, setActiveIndex, move, reset } =
-    useAddressAutocomplete(provider)
+interface Item {
+  s: Suggestion
+  saved: boolean
+}
+
+export function AddressAutocomplete({ provider, onPick, saved = [], onRemoveSaved }: Props) {
+  const { query, setQuery, suggestions, reset } = useAddressAutocomplete(provider)
   const [open, setOpen] = useState(false)
+  const [active, setActive] = useState(0)
   const listId = useId()
+
+  const q = query.trim().toLowerCase()
+  const savedMatches = saved
+    .filter((a) => q === '' || a.label.toLowerCase().includes(q) || a.ville.toLowerCase().includes(q))
+    .slice(0, 8)
+  const savedIds = new Set(savedMatches.map((a) => a.id))
+  const items: Item[] = [
+    ...savedMatches.map((a) => ({ s: a, saved: true })),
+    ...suggestions.filter((s) => !savedIds.has(s.id)).map((s) => ({ s, saved: false })),
+  ]
+
+  // remet la sélection en tête quand la requête change
+  useEffect(() => {
+    setActive(0)
+  }, [query])
 
   function pick(s: Suggestion) {
     onPick(s)
@@ -22,24 +44,24 @@ export function AddressAutocomplete({ provider, onPick }: Props) {
   }
 
   function onKeyDown(e: React.KeyboardEvent) {
-    if (!suggestions.length) return
+    if (!items.length) return
     if (e.key === 'ArrowDown') {
       e.preventDefault()
       setOpen(true)
-      move(1)
+      setActive((i) => (i + 1) % items.length)
     } else if (e.key === 'ArrowUp') {
       e.preventDefault()
-      move(-1)
+      setActive((i) => (i - 1 + items.length) % items.length)
     } else if (e.key === 'Enter') {
       e.preventDefault()
-      const s = suggestions[activeIndex] ?? suggestions[0]
-      if (s) pick(s)
+      const it = items[active] ?? items[0]
+      if (it) pick(it.s)
     } else if (e.key === 'Escape') {
       setOpen(false)
     }
   }
 
-  const showList = open && suggestions.length > 0
+  const showList = open && items.length > 0
 
   return (
     <div className="ac">
@@ -51,7 +73,7 @@ export function AddressAutocomplete({ provider, onPick }: Props) {
           role="combobox"
           aria-expanded={showList}
           aria-controls={listId}
-          aria-activedescendant={showList && activeIndex >= 0 ? `${listId}-${activeIndex}` : undefined}
+          aria-activedescendant={showList && active >= 0 ? `${listId}-${active}` : undefined}
           autoComplete="off"
           onChange={(e) => {
             setQuery(e.target.value)
@@ -66,8 +88,8 @@ export function AddressAutocomplete({ provider, onPick }: Props) {
           title="Ajouter l'arrêt"
           aria-label="Ajouter"
           onClick={() => {
-            const s = suggestions[activeIndex] ?? suggestions[0]
-            if (s) pick(s)
+            const it = items[active] ?? items[0]
+            if (it) pick(it.s)
           }}
         >
           <IcoPlus />
@@ -76,24 +98,36 @@ export function AddressAutocomplete({ provider, onPick }: Props) {
 
       {showList && (
         <ul className="ac-list" id={listId} role="listbox">
-          {suggestions.map((s, i) => (
+          {items.map((it, i) => (
             <li
-              key={s.id}
+              key={(it.saved ? 'saved-' : 'ban-') + it.s.id}
               id={`${listId}-${i}`}
               role="option"
-              aria-selected={i === activeIndex}
-              className={'ac-item' + (i === activeIndex ? ' active' : '')}
-              onMouseEnter={() => setActiveIndex(i)}
-              onMouseDown={(e) => {
-                e.preventDefault()
-              }}
-              onClick={() => pick(s)}
+              aria-selected={i === active}
+              className={'ac-item' + (i === active ? ' active' : '') + (it.saved ? ' saved' : '')}
+              onMouseEnter={() => setActive(i)}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => pick(it.s)}
             >
-              <span className="ac-ico"><IcoPin /></span>
+              <span className="ac-ico">{it.saved ? '★' : <IcoPin />}</span>
               <span className="ac-text">
-                <span className="ac-label">{s.label}</span>
-                {s.ville && <span className="ac-ville">{s.ville}</span>}
+                <span className="ac-label">{it.s.label}</span>
+                {it.s.ville && <span className="ac-ville">{it.s.ville}</span>}
               </span>
+              {it.saved && onRemoveSaved && (
+                <button
+                  className="ac-remove"
+                  aria-label={`Retirer ${it.s.label} du carnet`}
+                  title="Retirer du carnet"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onRemoveSaved(it.s.id)
+                  }}
+                >
+                  ✕
+                </button>
+              )}
             </li>
           ))}
         </ul>
