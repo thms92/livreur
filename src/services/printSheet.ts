@@ -104,7 +104,9 @@ export function buildSheetHtml(tournee: Tournee, livreur: LivreurWithColor | und
   h1 { font-size: 20px; margin: 0 0 8px; }
   .meta { font-size: 14px; margin-bottom: 12px; line-height: 1.5; }
   .meta b { font-size: 16px; }
-  #map { height: 320px; width: 100%; margin: 0 0 16px; border: 1px solid #ccc; border-radius: 6px; }
+  /* taille fixe (px) : le cadrage Leaflet doit être identique à l'écran et à l'impression */
+  #map { width: 680px; height: 360px; max-width: 100%; margin: 0 0 16px; border: 1px solid #ccc; border-radius: 6px; }
+  @page { size: A4 portrait; margin: 12mm; }
   ol { list-style: none; padding: 0; margin: 0; font-size: 15px; }
   li { padding: 8px 4px; border-bottom: 1px solid #ccc; }
   li.depot { font-weight: bold; }
