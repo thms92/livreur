@@ -1,64 +1,136 @@
-import { describe, it, expect, beforeEach } from 'vitest'
-import { renderHook, act } from '@testing-library/react'
+import { act, renderHook } from '@testing-library/react'
+import { afterEach, describe, expect, it } from 'vitest'
 import { LivreurProvider, useLivreur } from './LivreurContext'
 import type { ReactNode } from 'react'
+import { vi } from 'vitest'
+
+vi.mock('../services/routing', () => ({
+  optimizeTrip: vi.fn(async (stops: { id: string }[]) => ({
+    order: stops.map((_, i) => stops.length - 1 - i), // inverse l'ordre, déterministe
+    route: { km: 10, min: 15, geometry: [], optimized: true, approximate: false },
+  })),
+  computeRoute: vi.fn(async () => ({ km: 5, min: 8, geometry: [], optimized: false, approximate: false })),
+}))
 
 const wrapper = ({ children }: { children: ReactNode }) => <LivreurProvider>{children}</LivreurProvider>
 
-describe('LivreurContext — chauffeurs dynamiques', () => {
-  beforeEach(() => localStorage.clear())
+afterEach(() => localStorage.clear())
 
-  it('démarre avec 3 chauffeurs et les 12 arrêts seed groupés', () => {
+describe('LivreurContext — livreurs', () => {
+  it('démarre à vide', () => {
     const { result } = renderHook(() => useLivreur(), { wrapper })
-    expect(result.current.drivers.map((d) => d.id)).toEqual(['karim', 'lea', 'sofiane'])
-    expect(result.current.routes.karim.stops.length).toBe(4)
+    expect(result.current.livreurs).toEqual([])
+    expect(result.current.tournees).toEqual([])
   })
 
-  it('addDriver ajoute un chauffeur avec une couleur libre', () => {
+  it('ajoute un livreur avec une couleur auto (index 0 puis 1)', () => {
     const { result } = renderHook(() => useLivreur(), { wrapper })
-    act(() => result.current.addDriver('Michel'))
-    const michel = result.current.drivers.find((d) => d.nom === 'Michel')!
-    expect(michel).toBeTruthy()
-    expect(michel.couleur).toBe('var(--c-4)')
-    expect(result.current.routes[michel.id].stops.length).toBe(0)
+    act(() => result.current.addLivreur({ nom: 'Benali', prenom: 'Karim', telephone: '0612345678' }))
+    act(() => result.current.addLivreur({ nom: 'Martin', prenom: 'Léa', telephone: '' }))
+    expect(result.current.livreurs).toHaveLength(2)
+    expect(result.current.livreurs[0]).toMatchObject({ nom: 'Benali', prenom: 'Karim', colorIndex: 0 })
+    expect(result.current.livreurs[1].colorIndex).toBe(1)
+    expect(result.current.livreurs[0].couleur).toBe('var(--c-1)')
   })
 
-  it('renameDriver renomme', () => {
+  it('modifie un livreur', () => {
     const { result } = renderHook(() => useLivreur(), { wrapper })
-    act(() => result.current.renameDriver('karim', 'Karim B.'))
-    expect(result.current.drivers.find((d) => d.id === 'karim')!.nom).toBe('Karim B.')
+    act(() => result.current.addLivreur({ nom: 'Benali', prenom: 'Karim', telephone: '' }))
+    const id = result.current.livreurs[0].id
+    act(() => result.current.updateLivreur(id, { telephone: '0700000000' }))
+    expect(result.current.livreurs[0].telephone).toBe('0700000000')
   })
 
-  it('removeDriver supprime et repasse ses arrêts en non affectés', () => {
+  it('supprime un livreur', () => {
     const { result } = renderHook(() => useLivreur(), { wrapper })
-    act(() => result.current.removeDriver('karim'))
-    expect(result.current.drivers.some((d) => d.id === 'karim')).toBe(false)
-    expect(result.current.stops.filter((s) => s.driver === 'karim').length).toBe(0)
-    expect(result.current.stops.some((s) => s.id === 's1' && s.driver === null)).toBe(true)
+    act(() => result.current.addLivreur({ nom: 'Benali', prenom: 'Karim', telephone: '' }))
+    const id = result.current.livreurs[0].id
+    act(() => result.current.removeLivreur(id))
+    expect(result.current.livreurs).toEqual([])
+  })
+})
+
+const sugg = (label: string, lat: number, lng: number) => ({ id: label, label, ville: 'V', lat, lng })
+
+describe('LivreurContext — tournées', () => {
+  it('crée une tournée pour un livreur', () => {
+    const { result } = renderHook(() => useLivreur(), { wrapper })
+    act(() => result.current.addLivreur({ nom: 'B', prenom: 'K', telephone: '' }))
+    const lid = result.current.livreurs[0].id
+    let tid = ''
+    act(() => { tid = result.current.addTournee({ livreurId: lid, date: '2026-06-16' }) })
+    expect(result.current.tournees).toHaveLength(1)
+    expect(result.current.tournees[0]).toMatchObject({ id: tid, livreurId: lid, date: '2026-06-16', stops: [] })
   })
 
-  it('ne supprime pas le dernier chauffeur', () => {
+  it('ajoute / supprime des arrêts (route invalidée)', () => {
     const { result } = renderHook(() => useLivreur(), { wrapper })
-    act(() => {
-      result.current.removeDriver('karim')
-      result.current.removeDriver('lea')
-      result.current.removeDriver('sofiane')
-    })
-    expect(result.current.drivers.length).toBeGreaterThanOrEqual(1)
+    act(() => result.current.addLivreur({ nom: 'B', prenom: 'K', telephone: '' }))
+    let tid = ''
+    act(() => { tid = result.current.addTournee({ livreurId: result.current.livreurs[0].id, date: '2026-06-16' }) })
+    act(() => result.current.addStopToTournee(tid, sugg('A', 48.4, 1.6)))
+    act(() => result.current.addStopToTournee(tid, sugg('B', 48.2, 1.9)))
+    expect(result.current.tournees[0].stops.map((s) => s.label)).toEqual(['A', 'B'])
+    const sid = result.current.tournees[0].stops[0].id
+    act(() => result.current.removeStopFromTournee(tid, sid))
+    expect(result.current.tournees[0].stops.map((s) => s.label)).toEqual(['B'])
   })
 
-  it('assignStop affecte un arrêt au chauffeur actif puis le désaffecte', () => {
+  it('réordonne les arrêts manuellement', () => {
     const { result } = renderHook(() => useLivreur(), { wrapper })
-    act(() => result.current.assignStop('s5', 'karim'))
-    expect(result.current.stops.find((s) => s.id === 's5')!.driver).toBe('karim')
-    act(() => result.current.assignStop('s5', null))
-    expect(result.current.stops.find((s) => s.id === 's5')!.driver).toBeNull()
+    act(() => result.current.addLivreur({ nom: 'B', prenom: 'K', telephone: '' }))
+    let tid = ''
+    act(() => { tid = result.current.addTournee({ livreurId: result.current.livreurs[0].id, date: '2026-06-16' }) })
+    act(() => result.current.addStopToTournee(tid, sugg('A', 48.4, 1.6)))
+    act(() => result.current.addStopToTournee(tid, sugg('B', 48.2, 1.9)))
+    act(() => result.current.addStopToTournee(tid, sugg('C', 48.1, 2.0)))
+    act(() => result.current.reorderStops(tid, 0, 2))
+    expect(result.current.tournees[0].stops.map((s) => s.label)).toEqual(['B', 'C', 'A'])
   })
 
-  it('autoAssign réaffecte les arrêts non affectés', () => {
+  it('optimise la tournée via le service (ordre + route)', async () => {
     const { result } = renderHook(() => useLivreur(), { wrapper })
-    act(() => result.current.assignStop('s5', null))
-    act(() => result.current.autoAssign())
-    expect(result.current.stops.find((s) => s.id === 's5')!.driver).not.toBeNull()
+    act(() => result.current.addLivreur({ nom: 'B', prenom: 'K', telephone: '' }))
+    let tid = ''
+    act(() => { tid = result.current.addTournee({ livreurId: result.current.livreurs[0].id, date: '2026-06-16' }) })
+    act(() => result.current.addStopToTournee(tid, sugg('A', 48.4, 1.6)))
+    act(() => result.current.addStopToTournee(tid, sugg('B', 48.2, 1.9)))
+    await act(async () => { await result.current.optimizeTournee(tid) })
+    expect(result.current.tournees[0].stops.map((s) => s.label)).toEqual(['B', 'A'])
+    expect(result.current.tournees[0].route).toMatchObject({ km: 10, min: 15, optimized: true })
+  })
+
+  it('supprimer un livreur supprime ses tournées (cascade)', () => {
+    const { result } = renderHook(() => useLivreur(), { wrapper })
+    act(() => result.current.addLivreur({ nom: 'B', prenom: 'K', telephone: '' }))
+    const lid = result.current.livreurs[0].id
+    act(() => { result.current.addTournee({ livreurId: lid, date: '2026-06-16' }) })
+    act(() => result.current.removeLivreur(lid))
+    expect(result.current.tournees).toEqual([])
+  })
+})
+
+describe('LivreurContext — carnet d’adresses', () => {
+  it('mémorise automatiquement l’adresse ajoutée (dédup par id)', () => {
+    const { result } = renderHook(() => useLivreur(), { wrapper })
+    act(() => result.current.addLivreur({ nom: 'B', prenom: 'K', telephone: '' }))
+    let tid = ''
+    act(() => { tid = result.current.addTournee({ livreurId: result.current.livreurs[0].id, date: '2026-06-18' }) })
+    const a = { id: 'ban-1', label: '12 Rue des Lilas', ville: 'Chartres', lat: 48, lng: 1 }
+    act(() => result.current.addStopToTournee(tid, a))
+    act(() => result.current.addStopToTournee(tid, a)) // même adresse → pas de doublon
+    expect(result.current.adresses).toHaveLength(1)
+    expect(result.current.adresses[0]).toMatchObject({ id: 'ban-1', label: '12 Rue des Lilas', ville: 'Chartres' })
+  })
+
+  it('removeAdresse retire l’entrée du carnet', () => {
+    const { result } = renderHook(() => useLivreur(), { wrapper })
+    act(() => result.current.addLivreur({ nom: 'B', prenom: 'K', telephone: '' }))
+    let tid = ''
+    act(() => { tid = result.current.addTournee({ livreurId: result.current.livreurs[0].id, date: '2026-06-18' }) })
+    act(() => result.current.addStopToTournee(tid, { id: 'ban-9', label: 'X', ville: 'Y', lat: 0, lng: 0 }))
+    expect(result.current.adresses).toHaveLength(1)
+    act(() => result.current.removeAdresse('ban-9'))
+    expect(result.current.adresses).toEqual([])
   })
 })

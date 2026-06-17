@@ -1,30 +1,42 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App } from './App'
 
 vi.mock('react-leaflet', () => ({
-  MapContainer: ({ children }: { children?: React.ReactNode }) => <div data-testid="map">{children}</div>,
+  MapContainer: ({ children }: { children?: unknown }) => <div>{children as never}</div>,
   TileLayer: () => null,
+  AttributionControl: () => null,
   Marker: () => null,
   Polyline: () => null,
-  AttributionControl: () => null,
   useMap: () => ({ fitBounds: () => {}, invalidateSize: () => {} }),
 }))
 
-beforeEach(() => localStorage.clear())
+afterEach(() => localStorage.clear())
 
-describe('App', () => {
-  it('affiche le répartiteur et les arrêts seed', () => {
+describe('App (smoke)', () => {
+  it('créer un livreur → créer une tournée → le retrouver dans Chauffeurs', async () => {
     render(<App />)
-    expect(screen.getByText('Répartition des tournées')).toBeInTheDocument()
-    expect(screen.getByText('Malakoff')).toBeInTheDocument()
-  })
 
-  it('ajoute un chauffeur « Michel »', () => {
-    render(<App />)
-    const input = screen.getByPlaceholderText('Nom du chauffeur…')
-    fireEvent.change(input, { target: { value: 'Michel' } })
-    fireEvent.keyDown(input, { key: 'Enter' })
-    expect(screen.getAllByText('Michel').length).toBeGreaterThan(0)
+    await userEvent.click(screen.getByRole('button', { name: /Livreurs/ }))
+    await userEvent.type(screen.getByLabelText('Nom'), 'Benali')
+    await userEvent.type(screen.getByLabelText('Prénom'), 'Karim')
+    await userEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
+    expect(screen.getByText('Karim Benali')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /Tournées/ }))
+    await userEvent.click(screen.getByRole('button', { name: 'Nouvelle tournée' }))
+    expect(screen.getByText(/Ajouter un arrêt/)).toBeInTheDocument()
+
+    const dateInput = screen.getByLabelText('Date') as HTMLInputElement
+    await userEvent.clear(dateInput)
+    await userEvent.type(dateInput, '2026-06-16')
+    await userEvent.click(screen.getByRole('button', { name: 'Enregistrer la tournée' }))
+
+    await userEvent.click(screen.getByRole('button', { name: /Chauffeurs/ }))
+    const chDate = screen.getByLabelText('Date') as HTMLInputElement
+    await userEvent.clear(chDate)
+    await userEvent.type(chDate, '2026-06-16')
+    expect(screen.getByText('Karim Benali')).toBeInTheDocument()
   })
 })

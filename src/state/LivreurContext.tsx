@@ -4,54 +4,60 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useState,
   type ReactNode,
 } from 'react'
-import type { Driver, DriverConfig, DriverId, Routes, ScreenId, Stop, Suggestion, Theme } from '../types'
-import { DEFAULT_DRIVERS } from '../data/drivers'
-import { SEED_STOPS } from '../data/seed'
+import type { Livreur, Section, Stop, Suggestion, Theme, Tournee } from '../types'
 import { driverColor, nextColorIndex } from '../data/palette'
 import { BanProvider, type AddressProvider } from '../services/addressProvider'
 import { makeStopId } from '../services/stopId'
-import { assignToDriver, autoAssign as autoAssignStops, buildRoutes } from '../services/routeOptimizer'
+import { computeRoute, optimizeTrip } from '../services/routing'
 import { usePersistentState } from './usePersistentState'
 
 const defaultProvider = new BanProvider()
 
+/** Signature ordonnée des arrêts (ids) pour détecter un changement pendant un appel réseau. */
+function stopSignature(stops: Stop[]): string {
+  return stops.map((s) => s.id).join(',')
+}
+
+export interface LivreurInput {
+  nom: string
+  prenom: string
+  telephone: string
+}
+
+export type LivreurWithColor = Livreur & { couleur: string }
+
 export interface LivreurState {
   theme: Theme
-  screen: ScreenId
-  selected: DriverId
-  activeDriver: DriverId
-  highlighted: DriverId | null
-  progress: Record<DriverId, number>
-  stops: Stop[]
-  drivers: Driver[]
-  routes: Routes
-  assign: Record<string, string>
+  section: Section
+  livreurs: LivreurWithColor[]
+  tournees: Tournee[]
+  adresses: Suggestion[]
   provider: AddressProvider
-  toggleTheme: () => void
-  setScreen: (s: ScreenId) => void
-  setSelected: (id: DriverId) => void
-  setActiveDriver: (id: DriverId) => void
-  setHighlighted: (id: DriverId | null) => void
-  addDriver: (nom: string) => void
-  renameDriver: (id: DriverId, nom: string) => void
-  removeDriver: (id: DriverId) => void
-  addStop: (s: Suggestion) => void
-  addBulk: (text: string) => Promise<void>
-  removeStop: (id: string) => void
-  assignStop: (stopId: string, driverId: DriverId | null) => void
-  autoAssign: () => void
-  openDriver: (id: DriverId) => void
-  goDriver: () => void
-  advance: (id: DriverId) => void
-  resetTour: (id: DriverId) => void
   reduceMotion: boolean
+  toggleTheme: () => void
+  setSection: (s: Section) => void
+  // livreurs
+  addLivreur: (input: LivreurInput) => void
+  updateLivreur: (id: string, patch: Partial<LivreurInput>) => void
+  removeLivreur: (id: string) => void
+  // tournées
+  addTournee: (input: { livreurId: string; date: string }) => string
+  updateTournee: (id: string, patch: { livreurId?: string; date?: string }) => void
+  removeTournee: (id: string) => void
+  addStopToTournee: (tourneeId: string, s: Suggestion) => void
+  removeStopFromTournee: (tourneeId: string, stopId: string) => void
+  reorderStops: (tourneeId: string, from: number, to: number) => void
+  optimizeTournee: (tourneeId: string) => Promise<void>
+  refreshRoute: (tourneeId: string) => Promise<void>
+  // carnet d'adresses
+  removeAdresse: (id: string) => void
 }
 
 const Ctx = createContext<LivreurState | null>(null)
 
+// eslint-disable-next-line react-refresh/only-export-components -- hook colocalisé avec son provider (pattern context)
 export function useLivreur(): LivreurState {
   const v = useContext(Ctx)
   if (!v) throw new Error('useLivreur doit être utilisé dans <LivreurProvider>')
@@ -66,17 +72,10 @@ export function LivreurProvider({
   provider?: AddressProvider
 }) {
   const [theme, setTheme] = usePersistentState<Theme>('theme', 'light')
-  const [screen, setScreen] = usePersistentState<ScreenId>('screen', 'dispatch')
-  const [configs, setConfigs] = usePersistentState<DriverConfig[]>('drivers', DEFAULT_DRIVERS)
-  const [stops, setStops] = usePersistentState<Stop[]>('stops', SEED_STOPS)
-  const [progress, setProgress] = usePersistentState<Record<DriverId, number>>('progress', {
-    karim: 0,
-    lea: 0,
-    sofiane: 0,
-  })
-  const [selectedRaw, setSelected] = usePersistentState<DriverId>('selected', 'karim')
-  const [activeRaw, setActiveDriver] = useState<DriverId>(() => configs[0]?.id ?? 'karim')
-  const [highlighted, setHighlighted] = useState<DriverId | null>(null)
+  const [section, setSection] = usePersistentState<Section>('section', 'tournees')
+  const [livreursRaw, setLivreurs] = usePersistentState<Livreur[]>('livreurs', [])
+  const [tournees, setTournees] = usePersistentState<Tournee[]>('tournees', [])
+  const [adresses, setAdresses] = usePersistentState<Suggestion[]>('adresses', [])
 
   const reduceMotion =
     typeof window !== 'undefined' &&
@@ -87,103 +86,180 @@ export function LivreurProvider({
     document.documentElement.setAttribute('data-theme', theme)
   }, [theme])
 
-  const drivers = useMemo<Driver[]>(
-    () => configs.map((c) => ({ ...c, couleur: driverColor(c.colorIndex) })),
-    [configs],
+  const livreurs = useMemo<LivreurWithColor[]>(
+    () => livreursRaw.map((l) => ({ ...l, couleur: driverColor(l.colorIndex) })),
+    [livreursRaw],
   )
 
-  const selected = drivers.some((d) => d.id === selectedRaw) ? selectedRaw : (drivers[0]?.id ?? 'karim')
-  const activeDriver = drivers.some((d) => d.id === activeRaw) ? activeRaw : (drivers[0]?.id ?? 'karim')
+  const toggleTheme = useCallback(() => setTheme((t) => (t === 'light' ? 'dark' : 'light')), [setTheme])
 
-  const routes = useMemo(() => buildRoutes(stops, drivers), [stops, drivers])
-  const assign = useMemo(() => {
-    const m: Record<string, string> = {}
-    drivers.forEach((d) => routes[d.id].stops.forEach((s) => {
-      m[s.id] = d.couleur
-    }))
-    return m
-  }, [routes, drivers])
-
-  const addDriver = useCallback((nom: string) => {
-    const label = nom.trim()
-    if (!label) return
-    setConfigs((prev) => [
-      ...prev,
-      { id: makeStopId(), nom: label, colorIndex: nextColorIndex(prev.map((c) => c.colorIndex)) },
-    ])
-  }, [setConfigs])
-
-  const renameDriver = useCallback((id: DriverId, nom: string) => {
-    const label = nom.trim()
-    if (!label) return
-    setConfigs((prev) => prev.map((c) => (c.id === id ? { ...c, nom: label } : c)))
-  }, [setConfigs])
-
-  const removeDriver = useCallback((id: DriverId) => {
-    setConfigs((prev) => (prev.length <= 1 ? prev : prev.filter((c) => c.id !== id)))
-    setStops((prev) => prev.map((s) => (s.driver === id ? { ...s, driver: null } : s)))
-  }, [setConfigs, setStops])
-
-  const addStop = useCallback((s: Suggestion) => {
-    setStops((prev) => [
-      ...prev,
-      { id: makeStopId(), driver: null, label: s.label, ville: s.ville, lat: s.lat, lng: s.lng },
-    ])
-  }, [setStops])
-
-  const addBulk = useCallback(
-    async (text: string) => {
-      const lines = text.split('\n').map((l) => l.trim()).filter(Boolean)
-      const results = await Promise.all(lines.map((l) => provider.geocodeFirst(l)))
-      const items: Stop[] = results
-        .filter((r): r is NonNullable<typeof r> => r != null)
-        .map((r) => ({ id: makeStopId(), driver: null, label: r.label, ville: r.ville, lat: r.lat, lng: r.lng }))
-      if (items.length) setStops((prev) => [...prev, ...items])
+  const addLivreur = useCallback(
+    (input: LivreurInput) => {
+      const nom = input.nom.trim()
+      const prenom = input.prenom.trim()
+      if (!nom || !prenom) return
+      setLivreurs((prev) => [
+        ...prev,
+        {
+          id: makeStopId(),
+          nom,
+          prenom,
+          telephone: input.telephone.trim(),
+          colorIndex: nextColorIndex(prev.map((l) => l.colorIndex)),
+        },
+      ])
     },
-    [provider, setStops],
+    [setLivreurs],
   )
 
-  const removeStop = useCallback((id: string) => {
-    setStops((prev) => prev.filter((s) => s.id !== id))
-  }, [setStops])
-
-  const assignStop = useCallback((stopId: string, driverId: DriverId | null) => {
-    setStops((prev) => assignToDriver(prev, stopId, driverId))
-  }, [setStops])
-
-  const autoAssign = useCallback(() => {
-    setStops((prev) => autoAssignStops(prev, drivers))
-  }, [drivers, setStops])
-
-  const openDriver = useCallback((id: DriverId) => {
-    setSelected(id)
-    setScreen('driver')
-  }, [setSelected, setScreen])
-
-  const goDriver = useCallback(() => setScreen('driver'), [setScreen])
-
-  const advance = useCallback((id: DriverId) => {
-    const n = routes[id]?.stops.length ?? 0
-    setProgress((p) => ({ ...p, [id]: Math.min((p[id] ?? 0) + 1, n) }))
-  }, [routes, setProgress])
-
-  const resetTour = useCallback(
-    (id: DriverId) => setProgress((p) => ({ ...p, [id]: 0 })),
-    [setProgress],
+  const updateLivreur = useCallback(
+    (id: string, patch: Partial<LivreurInput>) => {
+      setLivreurs((prev) =>
+        prev.map((l) =>
+          l.id === id
+            ? {
+                ...l,
+                ...(patch.nom !== undefined ? { nom: patch.nom.trim() } : {}),
+                ...(patch.prenom !== undefined ? { prenom: patch.prenom.trim() } : {}),
+                ...(patch.telephone !== undefined ? { telephone: patch.telephone.trim() } : {}),
+              }
+            : l,
+        ),
+      )
+    },
+    [setLivreurs],
   )
 
-  const toggleTheme = useCallback(
-    () => setTheme((t) => (t === 'light' ? 'dark' : 'light')),
-    [setTheme],
+  const removeLivreur = useCallback(
+    (id: string) => {
+      setLivreurs((prev) => prev.filter((l) => l.id !== id))
+      setTournees((prev) => prev.filter((t) => t.livreurId !== id))
+    },
+    [setLivreurs, setTournees],
+  )
+
+  const addTournee = useCallback(
+    (input: { livreurId: string; date: string }) => {
+      const id = makeStopId()
+      setTournees((prev) => [...prev, { id, livreurId: input.livreurId, date: input.date, stops: [] }])
+      return id
+    },
+    [setTournees],
+  )
+
+  const updateTournee = useCallback(
+    (id: string, patch: { livreurId?: string; date?: string }) => {
+      setTournees((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)))
+    },
+    [setTournees],
+  )
+
+  const removeTournee = useCallback(
+    (id: string) => setTournees((prev) => prev.filter((t) => t.id !== id)),
+    [setTournees],
+  )
+
+  const addStopToTournee = useCallback(
+    (tourneeId: string, s: Suggestion) => {
+      const stop: Stop = { id: makeStopId(), label: s.label, ville: s.ville, lat: s.lat, lng: s.lng }
+      setTournees((prev) =>
+        prev.map((t) => (t.id === tourneeId ? { ...t, stops: [...t.stops, stop], route: undefined } : t)),
+      )
+      setAdresses((prev) =>
+        prev.some((a) => a.id === s.id)
+          ? prev
+          : [...prev, { id: s.id, label: s.label, ville: s.ville, lat: s.lat, lng: s.lng }],
+      )
+    },
+    [setTournees, setAdresses],
+  )
+
+  const removeStopFromTournee = useCallback(
+    (tourneeId: string, stopId: string) => {
+      setTournees((prev) =>
+        prev.map((t) =>
+          t.id === tourneeId ? { ...t, stops: t.stops.filter((s) => s.id !== stopId), route: undefined } : t,
+        ),
+      )
+    },
+    [setTournees],
+  )
+
+  const reorderStops = useCallback(
+    (tourneeId: string, from: number, to: number) => {
+      setTournees((prev) =>
+        prev.map((t) => {
+          if (t.id !== tourneeId) return t
+          const stops = t.stops.slice()
+          const [moved] = stops.splice(from, 1)
+          stops.splice(to, 0, moved)
+          return { ...t, stops, route: undefined }
+        }),
+      )
+    },
+    [setTournees],
+  )
+
+  const optimizeTournee = useCallback(
+    async (tourneeId: string) => {
+      const t = tournees.find((x) => x.id === tourneeId)
+      if (!t) return
+      const snapshot = stopSignature(t.stops)
+      const { order, route } = await optimizeTrip(t.stops)
+      const stops = order.map((i) => t.stops[i])
+      // Ignore le résultat si les arrêts ont changé pendant l'appel réseau (anti écrasement).
+      setTournees((prev) =>
+        prev.map((x) =>
+          x.id === tourneeId && stopSignature(x.stops) === snapshot ? { ...x, stops, route } : x,
+        ),
+      )
+    },
+    [tournees, setTournees],
+  )
+
+  const refreshRoute = useCallback(
+    async (tourneeId: string) => {
+      const t = tournees.find((x) => x.id === tourneeId)
+      if (!t) return
+      const snapshot = stopSignature(t.stops)
+      const route = await computeRoute(t.stops)
+      // Ignore un résultat obsolète si les arrêts ont changé entre-temps (appels concurrents).
+      setTournees((prev) =>
+        prev.map((x) =>
+          x.id === tourneeId && stopSignature(x.stops) === snapshot ? { ...x, route } : x,
+        ),
+      )
+    },
+    [tournees, setTournees],
+  )
+
+  const removeAdresse = useCallback(
+    (id: string) => setAdresses((prev) => prev.filter((a) => a.id !== id)),
+    [setAdresses],
   )
 
   const value: LivreurState = {
-    theme, screen, selected, activeDriver, highlighted, progress, stops, drivers, routes, assign, provider,
-    toggleTheme, setScreen, setSelected, setActiveDriver, setHighlighted,
-    addDriver, renameDriver, removeDriver,
-    addStop, addBulk, removeStop, assignStop, autoAssign,
-    openDriver, goDriver, advance, resetTour,
+    theme,
+    section,
+    livreurs,
+    tournees,
+    adresses,
+    provider,
     reduceMotion: !!reduceMotion,
+    toggleTheme,
+    setSection,
+    addLivreur,
+    updateLivreur,
+    removeLivreur,
+    addTournee,
+    updateTournee,
+    removeTournee,
+    addStopToTournee,
+    removeStopFromTournee,
+    reorderStops,
+    optimizeTournee,
+    refreshRoute,
+    removeAdresse,
   }
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }
