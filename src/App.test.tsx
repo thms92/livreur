@@ -34,9 +34,7 @@ describe('App (smoke)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Enregistrer la tournée' }))
 
     await userEvent.click(screen.getByRole('button', { name: /Chauffeurs/ }))
-    const chDate = screen.getByLabelText('Date') as HTMLInputElement
-    await userEvent.clear(chDate)
-    await userEvent.type(chDate, '2026-06-16')
+    // le sélecteur de date se cale par défaut sur la (seule) date ayant une tournée
     expect(screen.getByText('Karim Benali')).toBeInTheDocument()
   })
 })

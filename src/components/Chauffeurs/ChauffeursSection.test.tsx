@@ -30,7 +30,7 @@ function Seeder() {
 }
 
 describe('ChauffeursSection', () => {
-  it('liste les chauffeurs et filtre par date', async () => {
+  it('ne propose que les dates ayant des tournées et se cale dessus par défaut', async () => {
     render(
       <LivreurProvider>
         <Seeder />
@@ -38,13 +38,15 @@ describe('ChauffeursSection', () => {
       </LivreurProvider>,
     )
     const seed = screen.getByText('seed')
-    await act(async () => { seed.click() })
-    await act(async () => { seed.click() })
-    const dateInput = screen.getByLabelText('Date') as HTMLInputElement
-    await act(async () => {
-      dateInput.value = '2026-06-16'
-      dateInput.dispatchEvent(new Event('input', { bubbles: true }))
-    })
+    await act(async () => { seed.click() }) // ajoute le livreur
+    // pas encore de tournée → pas de sélecteur de date
+    expect(screen.queryByLabelText('Date')).not.toBeInTheDocument()
+
+    await act(async () => { seed.click() }) // ajoute une tournée le 2026-06-16
+    // la date par défaut = la seule date ayant une tournée → le chauffeur s'affiche
     expect(screen.getByText('Karim Benali')).toBeInTheDocument()
+    // le sélecteur existe et affiche la date en clair
+    expect(screen.getByLabelText('Date')).toBeInTheDocument()
+    expect(screen.getByText(/16 juin 2026/)).toBeInTheDocument()
   })
 })

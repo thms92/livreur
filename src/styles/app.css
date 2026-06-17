@@ -108,6 +108,7 @@ button { font-family: inherit; cursor: pointer; }
 .chauffeur-card { border-left: 4px solid var(--c-1); border-radius: 8px; padding: 12px 14px; background: rgba(128, 128, 128, 0.08); }
 .chauffeur-head { display: flex; align-items: center; gap: 10px; }
 .chauffeur-stats { margin-left: auto; font-weight: 700; }
+.date-select { font-weight: 600; min-width: 200px; }
 .chauffeur-trip { margin-top: 8px; opacity: 0.85; font-size: 13px; display: flex; align-items: center; gap: 10px; }
 .chauffeur-trip-line { flex: 1; }
 .btn-print { padding: 4px 10px; font-size: 13px; }
