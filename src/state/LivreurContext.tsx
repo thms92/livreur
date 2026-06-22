@@ -31,6 +31,7 @@ export interface LivreurState {
   updateLivreur: (id: string, patch: Partial<LivreurInput>) => Promise<void>
   removeLivreur: (id: string) => Promise<void>
   addTournee: (input: { livreurId: string; date: string }) => Promise<string>
+  duplicateTournee: (sourceId: string, livreurId: string) => Promise<string>
   updateTournee: (id: string, patch: { livreurId?: string; date?: string }) => Promise<void>
   removeTournee: (id: string) => Promise<void>
   addStopToTournee: (tourneeId: string, s: Suggestion) => Promise<void>
@@ -125,6 +126,20 @@ export function LivreurProvider({ children }: { children: ReactNode }) {
     } catch (e) { fail(e); return '' }
   }, [fail])
 
+  // Crée une copie d'une tournée (mêmes date/arrêts, arrêts ré-identifiés) pour un autre livreur.
+  const duplicateTournee = useCallback(async (sourceId: string, livreurId: string) => {
+    const src = tournees.find((t) => t.id === sourceId)
+    if (!src) return ''
+    try {
+      const created = await api.createTournee({ livreurId, date: src.date })
+      const stops = src.stops.map((s) => ({ ...s, id: makeStopId() }))
+      const route = src.route
+      setTournees((p) => [...p, { ...created, stops, route }])
+      await api.updateTournee(created.id, { stops, route: route ?? null })
+      return created.id
+    } catch (e) { fail(e); return '' }
+  }, [tournees, fail])
+
   const updateTournee = useCallback(async (id: string, patch: { livreurId?: string; date?: string }) => {
     const prev = tournees
     setTournees((p) => p.map((t) => (t.id === id ? { ...t, ...patch } : t)))
@@ -205,7 +220,7 @@ export function LivreurProvider({ children }: { children: ReactNode }) {
     theme, section, loading, error, livreurs, tournees, adresses, provider: defaultProvider,
     reduceMotion: !!reduceMotion, toggleTheme, setSection, dismissError,
     addLivreur, updateLivreur, removeLivreur,
-    addTournee, updateTournee, removeTournee,
+    addTournee, duplicateTournee, updateTournee, removeTournee,
     addStopToTournee, removeStopFromTournee, reorderStops, optimizeTournee, refreshRoute, removeAdresse,
   }
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>

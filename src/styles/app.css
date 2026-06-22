@@ -221,3 +221,24 @@ button { font-family: inherit; cursor: pointer; }
   color: #b42318; border: 1px solid rgba(229, 72, 77, 0.3);
 }
 .error-banner .btn-ghost { margin-left: auto; }
+
+/* Fenêtre de duplication (choix du livreur) */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 50;
+  display: grid; place-items: center;
+  background: rgba(0, 0, 0, 0.4); padding: 20px;
+}
+.modal {
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border); border-radius: 12px;
+  padding: 20px; min-width: 300px; max-width: 90vw;
+  display: flex; flex-direction: column; gap: 14px;
+}
+.modal h3 { margin: 0; }
+.dup-livreurs { display: flex; flex-direction: column; gap: 6px; }
+.dup-livreur {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--surface-2); color: var(--text); cursor: pointer; text-align: left;
+}
+.dup-livreur:hover { background: var(--surface-3); }

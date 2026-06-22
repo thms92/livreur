@@ -85,6 +85,27 @@ describe('LivreurContext (API)', () => {
     expect(result.current.tournees[0].stops.map((s) => s.label)).toEqual(['A'])
   })
 
+  it('duplicateTournee copie les arrêts vers un autre livreur (original intact)', async () => {
+    const { result } = await ready()
+    await act(async () => { await result.current.addLivreur({ nom: 'A', prenom: 'A', telephone: '' }) })
+    await act(async () => { await result.current.addLivreur({ nom: 'B', prenom: 'B', telephone: '' }) })
+    const a = result.current.livreurs[0], b = result.current.livreurs[1]
+    let srcId = ''
+    await act(async () => { srcId = await result.current.addTournee({ livreurId: a.id, date: '2026-06-18' }) })
+    await act(async () => {
+      await result.current.addStopToTournee(srcId, { id: 'ban-1', label: 'X', ville: 'V', lat: 48, lng: 1 })
+    })
+    let dupId = ''
+    await act(async () => { dupId = await result.current.duplicateTournee(srcId, b.id) })
+    expect(result.current.tournees).toHaveLength(2)
+    const dup = result.current.tournees.find((t) => t.id === dupId)!
+    expect(dup.livreurId).toBe(b.id)
+    expect(dup.stops.map((s) => s.label)).toEqual(['X'])
+    const src = result.current.tournees.find((t) => t.id === srcId)!
+    expect(src.livreurId).toBe(a.id)
+    expect(src.stops.map((s) => s.label)).toEqual(['X'])
+  })
+
   it('removeLivreur supprime le livreur et ses tournées (optimiste)', async () => {
     const { result } = await ready()
     await act(async () => { await result.current.addLivreur({ nom: 'B', prenom: 'K', telephone: '' }) })

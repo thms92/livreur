@@ -6,8 +6,9 @@ import { TourneeEditor } from './TourneeEditor'
 const today = () => new Date().toISOString().slice(0, 10)
 
 export function TourneesSection() {
-  const { livreurs, addTournee } = useLivreur()
+  const { livreurs, addTournee, duplicateTournee } = useLivreur()
   const [editing, setEditing] = useState<string | null>(null)
+  const [dupFrom, setDupFrom] = useState<string | null>(null)
 
   if (editing) return <TourneeEditor tourneeId={editing} onClose={() => setEditing(null)} />
 
@@ -20,13 +21,37 @@ export function TourneesSection() {
     if (id) setEditing(id)
   }
 
+  async function pickLivreur(livreurId: string) {
+    const from = dupFrom
+    setDupFrom(null)
+    if (!from) return
+    const id = await duplicateTournee(from, livreurId)
+    if (id) setEditing(id)
+  }
+
   return (
     <section className="section">
       <div className="section-head">
         <h1>Tournées</h1>
         <button className="btn-primary" onClick={create}>Nouvelle tournée</button>
       </div>
-      <TourneeList onOpen={(id) => setEditing(id)} />
+      <TourneeList onOpen={(id) => setEditing(id)} onDuplicate={(id) => setDupFrom(id)} />
+
+      {dupFrom && (
+        <div className="modal-overlay" onClick={() => setDupFrom(null)}>
+          <div className="modal" role="dialog" aria-label="Dupliquer la tournée" onClick={(e) => e.stopPropagation()}>
+            <h3>Dupliquer vers quel livreur ?</h3>
+            <div className="dup-livreurs">
+              {livreurs.map((l) => (
+                <button key={l.id} className="dup-livreur" onClick={() => pickLivreur(l.id)}>
+                  <span className="dot" style={{ background: l.couleur }} /> {l.prenom} {l.nom}
+                </button>
+              ))}
+            </div>
+            <button className="btn-ghost" onClick={() => setDupFrom(null)}>Annuler</button>
+          </div>
+        </div>
+      )}
     </section>
   )
 }

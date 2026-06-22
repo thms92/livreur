@@ -3,9 +3,10 @@ import { partitionTournees } from '../../lib/tourneeTime'
 
 interface Props {
   onOpen: (tourneeId: string) => void
+  onDuplicate: (tourneeId: string) => void
 }
 
-export function TourneeList({ onOpen }: Props) {
+export function TourneeList({ onOpen, onDuplicate }: Props) {
   const { tournees, livreurs, removeTournee } = useLivreur()
 
   const upcoming = partitionTournees(tournees).upcoming
@@ -26,6 +27,7 @@ export function TourneeList({ onOpen }: Props) {
               {t.route ? ` · ${t.route.km.toFixed(0)} km · ${Math.round(t.route.min)} min` : ''}
             </span>
             <button className="btn-ghost" onClick={() => onOpen(t.id)}>Modifier</button>
+            <button className="btn-ghost" onClick={() => onDuplicate(t.id)}>Dupliquer</button>
             <button className="btn-danger" onClick={() => confirm('Supprimer cette tournée ?') && removeTournee(t.id)}>
               Supprimer
             </button>
