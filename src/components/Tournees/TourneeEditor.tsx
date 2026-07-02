@@ -1,4 +1,3 @@
-import { useEffect, useRef } from 'react'
 import { useLivreur } from '../../state/LivreurContext'
 import { AddressAutocomplete } from '../AddressAutocomplete'
 import { TourneeMap } from '../map/TourneeMap'
@@ -21,27 +20,14 @@ export function TourneeEditor({ tourneeId, onClose }: Props) {
     addStopToTournee,
     removeStopFromTournee,
     reorderStops,
+    setStopHeure,
+    setTourneeHeure,
+    sortTourneeByTime,
     optimizeTournee,
-    refreshRoute,
   } = useLivreur()
 
   const tournee = tournees.find((t) => t.id === tourneeId)
   const livreur = livreurs.find((l) => l.id === tournee?.livreurId)
-
-  // Après une modification des arrêts, on relance le bon calcul :
-  //  - 'optimize' (ajout/suppression) → réordonne via OSRM /trip
-  //  - 'route'    (glisser-déposer)   → garde l'ordre manuel, recalcule km/temps
-  const pendingRef = useRef<'optimize' | 'route' | null>(null)
-  const stopsSig = tournee ? tournee.stops.map((s) => s.id).join(',') : ''
-
-  useEffect(() => {
-    if (!tournee) return
-    const kind = pendingRef.current
-    pendingRef.current = null
-    if (kind === 'optimize') optimizeTournee(tournee.id)
-    else if (kind === 'route') refreshRoute(tournee.id)
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- déclenché uniquement quand la liste d'arrêts change
-  }, [stopsSig])
 
   if (!tournee) return null
 
@@ -77,26 +63,25 @@ export function TourneeEditor({ tourneeId, onClose }: Props) {
             provider={provider}
             saved={adresses}
             onRemoveSaved={removeAdresse}
-            onPick={(s) => {
-              pendingRef.current = 'optimize'
-              addStopToTournee(tournee.id, s)
-            }}
+            onPick={(s) => addStopToTournee(tournee.id, s)}
           />
         </div>
 
         <StopList
           stops={tournee.stops}
-          onRemove={(id) => {
-            pendingRef.current = 'optimize'
-            removeStopFromTournee(tournee.id, id)
-          }}
-          onReorder={(from, to) => {
-            pendingRef.current = 'route'
-            reorderStops(tournee.id, from, to)
-          }}
+          departHeure={tournee.departHeure}
+          retourHeure={tournee.retourHeure}
+          onRemove={(id) => removeStopFromTournee(tournee.id, id)}
+          onReorder={(from, to) => reorderStops(tournee.id, from, to)}
+          onSetHeure={(id, heure) => setStopHeure(tournee.id, id, heure)}
+          onDepartHeure={(heure) => setTourneeHeure(tournee.id, { departHeure: heure })}
+          onRetourHeure={(heure) => setTourneeHeure(tournee.id, { retourHeure: heure })}
         />
 
         <div className="editor-footer">
+          <button className="btn-ghost" onClick={() => sortTourneeByTime(tournee.id)}>
+            Trier par heure
+          </button>
           <button className="btn-ghost" onClick={() => optimizeTournee(tournee.id)}>
             Ré-optimiser
           </button>

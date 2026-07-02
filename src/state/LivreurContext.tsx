@@ -6,6 +6,7 @@ import { driverColor } from '../data/palette'
 import { BanProvider, type AddressProvider } from '../services/addressProvider'
 import { makeStopId } from '../services/stopId'
 import { computeRoute, optimizeTrip } from '../services/routing'
+import { sameStopOrder, sortStopsByTime } from '../lib/stopOrder'
 import { api } from '../services/api'
 import { usePersistentState } from './usePersistentState'
 
@@ -37,6 +38,9 @@ export interface LivreurState {
   addStopToTournee: (tourneeId: string, s: Suggestion) => Promise<void>
   removeStopFromTournee: (tourneeId: string, stopId: string) => Promise<void>
   reorderStops: (tourneeId: string, from: number, to: number) => Promise<void>
+  setStopHeure: (tourneeId: string, stopId: string, heure: string) => Promise<void>
+  setTourneeHeure: (tourneeId: string, patch: { departHeure?: string; retourHeure?: string }) => Promise<void>
+  sortTourneeByTime: (tourneeId: string) => Promise<void>
   optimizeTournee: (tourneeId: string) => Promise<void>
   refreshRoute: (tourneeId: string) => Promise<void>
   removeAdresse: (id: string) => Promise<void>
@@ -134,8 +138,13 @@ export function LivreurProvider({ children }: { children: ReactNode }) {
       const created = await api.createTournee({ livreurId, date: src.date })
       const stops = src.stops.map((s) => ({ ...s, id: makeStopId() }))
       const route = src.route
-      setTournees((p) => [...p, { ...created, stops, route }])
-      await api.updateTournee(created.id, { stops, route: route ?? null })
+      const heures = {
+        departHeure: src.departHeure,
+        retourHeure: src.retourHeure,
+        ordreManuel: src.ordreManuel,
+      }
+      setTournees((p) => [...p, { ...created, stops, route, ...heures }])
+      await api.updateTournee(created.id, { stops, route: route ?? null, ...heures })
       return created.id
     } catch (e) { fail(e); return '' }
   }, [tournees, fail])
@@ -152,34 +161,55 @@ export function LivreurProvider({ children }: { children: ReactNode }) {
     try { await api.deleteTournee(id) } catch (e) { setTournees(prev); fail(e) }
   }, [tournees, fail])
 
-  // Persiste stops + route d'une tournée donnée (après édition d'arrêts ou calcul OSRM).
-  const persistStops = useCallback(async (id: string, stops: Stop[], route: Tournee['route'], prev: Tournee[]) => {
-    try { await api.updateTournee(id, { stops, route: route ?? null }) } catch (e) { setTournees(prev); fail(e) }
-  }, [fail])
+  // Champs de tournée persistables en plus des stops/route (heures, verrou d'ordre).
+  type TourneeExtra = { departHeure?: string; retourHeure?: string; ordreManuel?: boolean }
+
+  // Persiste stops + route (+ champs annexes) d'une tournée donnée.
+  const persistStops = useCallback(
+    async (id: string, stops: Stop[], route: Tournee['route'], prev: Tournee[], extra?: TourneeExtra) => {
+      try {
+        await api.updateTournee(id, { stops, route: route ?? null, ...extra })
+      } catch (e) { setTournees(prev); fail(e) }
+    },
+    [fail],
+  )
+
+  // Applique un nouvel ordre d'arrêts : maj optimiste, recalcul du trajet (OSRM /route), persistance.
+  const recompute = useCallback(
+    async (tourneeId: string, stops: Stop[], prev: Tournee[], extra?: TourneeExtra) => {
+      setTournees((p) => p.map((x) => (x.id === tourneeId ? { ...x, ...extra, stops, route: undefined } : x)))
+      const route = await computeRoute(stops)
+      setTournees((p) => p.map((x) => (x.id === tourneeId ? { ...x, route } : x)))
+      try {
+        await api.updateTournee(tourneeId, { stops, route, ...extra })
+      } catch (e) { setTournees(prev); fail(e) }
+    },
+    [fail],
+  )
 
   const addStopToTournee = useCallback(async (tourneeId: string, s: Suggestion) => {
     const prev = tournees
     const t = prev.find((x) => x.id === tourneeId)
     if (!t) return
     const stop: Stop = { id: makeStopId(), label: s.label, ville: s.ville, lat: s.lat, lng: s.lng }
-    const stops = [...t.stops, stop]
-    setTournees((p) => p.map((x) => (x.id === tourneeId ? { ...x, stops, route: undefined } : x)))
+    // Ordre chronologique par défaut ; on respecte un ordre figé manuellement.
+    const stops = t.ordreManuel ? [...t.stops, stop] : sortStopsByTime([...t.stops, stop])
     if (!adresses.some((a) => a.id === s.id)) {
       setAdresses((p) => [...p, { id: s.id, label: s.label, ville: s.ville, lat: s.lat, lng: s.lng }])
       api.upsertAdresse({ id: s.id, label: s.label, ville: s.ville, lat: s.lat, lng: s.lng }).catch(() => {})
     }
-    await persistStops(tourneeId, stops, undefined, prev)
-  }, [tournees, adresses, persistStops])
+    await recompute(tourneeId, stops, prev)
+  }, [tournees, adresses, recompute])
 
   const removeStopFromTournee = useCallback(async (tourneeId: string, stopId: string) => {
     const prev = tournees
     const t = prev.find((x) => x.id === tourneeId)
     if (!t) return
     const stops = t.stops.filter((s) => s.id !== stopId)
-    setTournees((p) => p.map((x) => (x.id === tourneeId ? { ...x, stops, route: undefined } : x)))
-    await persistStops(tourneeId, stops, undefined, prev)
-  }, [tournees, persistStops])
+    await recompute(tourneeId, stops, prev)
+  }, [tournees, recompute])
 
+  // Glisser-déposer : fige l'ordre manuellement (ordreManuel = true).
   const reorderStops = useCallback(async (tourneeId: string, from: number, to: number) => {
     const prev = tournees
     const t = prev.find((x) => x.id === tourneeId)
@@ -187,9 +217,46 @@ export function LivreurProvider({ children }: { children: ReactNode }) {
     const stops = t.stops.slice()
     const [m] = stops.splice(from, 1)
     stops.splice(to, 0, m)
-    setTournees((p) => p.map((x) => (x.id === tourneeId ? { ...x, stops, route: undefined } : x)))
-    await persistStops(tourneeId, stops, undefined, prev)
-  }, [tournees, persistStops])
+    await recompute(tourneeId, stops, prev, { ordreManuel: true })
+  }, [tournees, recompute])
+
+  // Édite l'heure de livraison d'un arrêt ; re-trie si l'ordre est en mode auto.
+  const setStopHeure = useCallback(async (tourneeId: string, stopId: string, heure: string) => {
+    const prev = tournees
+    const t = prev.find((x) => x.id === tourneeId)
+    if (!t) return
+    const updated = t.stops.map((s) => (s.id === stopId ? { ...s, heure: heure || undefined } : s))
+    const stops = t.ordreManuel ? updated : sortStopsByTime(updated)
+    if (sameStopOrder(stops, t.stops)) {
+      // L'ordre ne bouge pas : le trajet est inchangé, on persiste juste les heures.
+      setTournees((p) => p.map((x) => (x.id === tourneeId ? { ...x, stops } : x)))
+      await persistStops(tourneeId, stops, t.route, prev)
+    } else {
+      await recompute(tourneeId, stops, prev)
+    }
+  }, [tournees, persistStops, recompute])
+
+  // Bornes dépôt (départ/retour) : champs de tournée, sans impact sur le trajet.
+  const setTourneeHeure = useCallback(
+    async (tourneeId: string, patch: { departHeure?: string; retourHeure?: string }) => {
+      const prev = tournees
+      const norm: TourneeExtra = {}
+      if (patch.departHeure !== undefined) norm.departHeure = patch.departHeure || undefined
+      if (patch.retourHeure !== undefined) norm.retourHeure = patch.retourHeure || undefined
+      setTournees((p) => p.map((x) => (x.id === tourneeId ? { ...x, ...norm } : x)))
+      try { await api.updateTournee(tourneeId, norm) } catch (e) { setTournees(prev); fail(e) }
+    },
+    [tournees, fail],
+  )
+
+  // Rebascule en tri chronologique automatique (annule l'ordre manuel).
+  const sortTourneeByTime = useCallback(async (tourneeId: string) => {
+    const prev = tournees
+    const t = prev.find((x) => x.id === tourneeId)
+    if (!t) return
+    const stops = sortStopsByTime(t.stops)
+    await recompute(tourneeId, stops, prev, { ordreManuel: false })
+  }, [tournees, recompute])
 
   const optimizeTournee = useCallback(async (tourneeId: string) => {
     const prev = tournees
@@ -197,8 +264,9 @@ export function LivreurProvider({ children }: { children: ReactNode }) {
     if (!t) return
     const { order, route } = await optimizeTrip(t.stops)
     const stops = order.map((i) => t.stops[i])
-    setTournees((p) => p.map((x) => (x.id === tourneeId ? { ...x, stops, route } : x)))
-    await persistStops(tourneeId, stops, route, prev)
+    // L'optimisation géographique impose un ordre : on le considère comme manuel.
+    setTournees((p) => p.map((x) => (x.id === tourneeId ? { ...x, stops, route, ordreManuel: true } : x)))
+    await persistStops(tourneeId, stops, route, prev, { ordreManuel: true })
   }, [tournees, persistStops])
 
   const refreshRoute = useCallback(async (tourneeId: string) => {
@@ -221,7 +289,9 @@ export function LivreurProvider({ children }: { children: ReactNode }) {
     reduceMotion: !!reduceMotion, toggleTheme, setSection, dismissError,
     addLivreur, updateLivreur, removeLivreur,
     addTournee, duplicateTournee, updateTournee, removeTournee,
-    addStopToTournee, removeStopFromTournee, reorderStops, optimizeTournee, refreshRoute, removeAdresse,
+    addStopToTournee, removeStopFromTournee, reorderStops,
+    setStopHeure, setTourneeHeure, sortTourneeByTime,
+    optimizeTournee, refreshRoute, removeAdresse,
   }
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }

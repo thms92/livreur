@@ -46,6 +46,27 @@ describe('_db — tournées', () => {
     await deleteTournee(db, t.id)
     expect((await getState(db)).tournees).toEqual([])
   })
+
+  it('persiste et relit les horaires (bornes dépôt, heure d’arrêt, ordre manuel)', async () => {
+    const db = makeTestDb()
+    const l = await createLivreur(db, { nom: 'B', prenom: 'K' })
+    const t = await createTournee(db, { livreurId: l.id, date: '2026-06-18' })
+    // par défaut : pas de bornes, ordre auto
+    let state = await getState(db)
+    expect(state.tournees[0]).toMatchObject({ departHeure: undefined, retourHeure: undefined, ordreManuel: false })
+    await updateTournee(db, t.id, {
+      stops: [{ id: 's1', label: 'A', ville: 'V', lat: 48, lng: 1, heure: '09:30' }],
+      departHeure: '08:00',
+      retourHeure: '17:00',
+      ordreManuel: true,
+    })
+    state = await getState(db)
+    expect(state.tournees[0]).toMatchObject({ departHeure: '08:00', retourHeure: '17:00', ordreManuel: true })
+    expect(state.tournees[0].stops[0].heure).toBe('09:30')
+    // chaîne vide → remise à null (borne effacée)
+    await updateTournee(db, t.id, { departHeure: '' })
+    expect((await getState(db)).tournees[0].departHeure).toBeUndefined()
+  })
 })
 
 describe('_db — adresses', () => {

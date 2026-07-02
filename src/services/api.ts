@@ -32,7 +32,10 @@ export const api = {
     req<Tournee>('/api/tournees', 'POST', input),
   updateTournee: (
     id: string,
-    patch: { livreurId?: string; date?: string; stops?: Stop[]; route?: RouteResult | null },
+    patch: {
+      livreurId?: string; date?: string; stops?: Stop[]; route?: RouteResult | null
+      departHeure?: string; retourHeure?: string; ordreManuel?: boolean
+    },
   ) => req<{ ok: true }>(`/api/tournees/${id}`, 'PUT', patch),
   deleteTournee: (id: string) => req<{ ok: true }>(`/api/tournees/${id}`, 'DELETE'),
 

@@ -40,4 +40,32 @@ describe('StopList', () => {
     fireDrag(stopRows[0], stopRows[1], dt)
     expect(onReorder).toHaveBeenCalledWith(0, 1)
   })
+
+  it('affiche l’heure d’un arrêt et remonte la saisie via onSetHeure', () => {
+    const withHeure: Stop[] = [{ ...stops[0], heure: '09:30' }, stops[1]]
+    const onSetHeure = vi.fn()
+    render(<StopList stops={withHeure} onRemove={() => {}} onReorder={() => {}} onSetHeure={onSetHeure} />)
+    const input = screen.getByLabelText('Heure de livraison Arrêt A') as HTMLInputElement
+    expect(input.value).toBe('09:30')
+    fireEvent.change(screen.getByLabelText('Heure de livraison Arrêt B'), { target: { value: '10:15' } })
+    expect(onSetHeure).toHaveBeenCalledWith('b', '10:15')
+  })
+
+  it('remonte les bornes dépôt (départ/retour)', () => {
+    const onDepartHeure = vi.fn()
+    const onRetourHeure = vi.fn()
+    render(
+      <StopList
+        stops={stops}
+        departHeure="08:00"
+        onRemove={() => {}}
+        onReorder={() => {}}
+        onDepartHeure={onDepartHeure}
+        onRetourHeure={onRetourHeure}
+      />,
+    )
+    expect((screen.getByLabelText('Heure de départ du dépôt') as HTMLInputElement).value).toBe('08:00')
+    fireEvent.change(screen.getByLabelText('Heure de retour au dépôt'), { target: { value: '17:30' } })
+    expect(onRetourHeure).toHaveBeenCalledWith('17:30')
+  })
 })

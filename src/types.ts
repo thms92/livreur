@@ -21,6 +21,7 @@ export interface Stop {
   ville: string
   lat: number
   lng: number
+  heure?: string // heure de livraison souhaitée, "HH:MM" (24h, heure locale FR)
 }
 
 export interface RouteResult {
@@ -37,6 +38,9 @@ export interface Tournee {
   date: string // "YYYY-MM-DD"
   stops: Stop[] // ordre = ordre de visite des clients
   route?: RouteResult
+  departHeure?: string // heure de départ du dépôt, "HH:MM" (24h), saisie manuelle
+  retourHeure?: string // heure de retour au dépôt, "HH:MM" (24h), saisie manuelle
+  ordreManuel?: boolean // true = ordre figé manuellement ; sinon tri chronologique auto
 }
 
 export interface Suggestion {

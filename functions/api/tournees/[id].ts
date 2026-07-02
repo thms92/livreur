@@ -7,6 +7,7 @@ type Ctx = { env: { DB: D1Database }; request: Request; params: { id: string } }
 export const onRequestPut = async (c: Ctx): Promise<Response> => {
   const patch = (await c.request.json().catch(() => ({}))) as {
     livreurId?: string; date?: string; stops?: Stop[]; route?: RouteResult | null
+    departHeure?: string; retourHeure?: string; ordreManuel?: boolean
   }
   await updateTournee(c.env.DB, c.params.id, patch)
   return json({ ok: true })

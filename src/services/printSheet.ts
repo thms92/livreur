@@ -90,9 +90,12 @@ export function buildSheetHtml(tournee: Tournee, livreur: LivreurWithColor | und
       (s, i) =>
         `<li><span class="n">${i + 1}.</span> <span class="a">${esc(s.label)}</span>` +
         (s.ville ? ` — <span class="v">${esc(s.ville)}</span>` : '') +
+        (s.heure ? ` <span class="h">${esc(s.heure)}</span>` : '') +
         `</li>`,
     )
     .join('')
+  const departH = tournee.departHeure ? ` <span class="h">${esc(tournee.departHeure)}</span>` : ''
+  const retourH = tournee.retourHeure ? ` <span class="h">${esc(tournee.retourHeure)}</span>` : ''
 
   return `<!DOCTYPE html>
 <html lang="fr"><head><meta charset="utf-8"><title>Feuille de tournée</title>
@@ -112,6 +115,7 @@ export function buildSheetHtml(tournee: Tournee, livreur: LivreurWithColor | und
   li.depot { font-weight: bold; }
   .n { display: inline-block; width: 1.8em; font-weight: bold; }
   .v { color: #444; }
+  .h { float: right; font-weight: bold; font-variant-numeric: tabular-nums; }
   .pin { background: #1f6feb; color: #fff; border-radius: 50%; width: 24px; height: 24px;
     display: flex; align-items: center; justify-content: center; font: bold 12px sans-serif; }
   .pin.depot { background: #111; width: 26px; height: 26px; border-radius: 6px; font-size: 14px; }
@@ -124,9 +128,9 @@ export function buildSheetHtml(tournee: Tournee, livreur: LivreurWithColor | und
   }</div>
   <div id="map"></div>
   <ol>
-    <li class="depot">🏭 Départ — ${esc(depotLine)}</li>
+    <li class="depot">🏭 Départ — ${esc(depotLine)}${departH}</li>
     ${rows}
-    <li class="depot">🏭 Retour — ${esc(depotLine)}</li>
+    <li class="depot">🏭 Retour — ${esc(depotLine)}${retourH}</li>
   </ol>
   <script src="${LEAFLET_JS}"></script>
   ${mapScript(tournee)}

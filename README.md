@@ -28,11 +28,12 @@ utilisateurs. **Aucune authentification** (accès libre par l'URL — choix assu
 restreint). Le front charge l'état au démarrage et applique des mises à jour **optimistes avec
 rollback**.
 
-Schéma : `migrations/0001_init.sql`. Configuration : `wrangler.toml` (binding `DB`).
+Schéma : `migrations/` (`0001_init.sql`, `0002_horaires.sql`). Configuration : `wrangler.toml` (binding `DB`).
 
 ```bash
-# créer/migrer la base
+# créer/migrer la base (rejouer chaque migration dans l'ordre)
 npx wrangler d1 execute livreur-db --remote --file migrations/0001_init.sql
+npx wrangler d1 execute livreur-db --remote --file migrations/0002_horaires.sql
 # déployer (build + Functions + binding D1)
 npm run build && npx wrangler pages deploy dist --project-name=livreur --branch=main
 # dev local (Functions + D1 locale)

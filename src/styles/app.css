@@ -98,6 +98,8 @@ button { font-family: inherit; cursor: pointer; }
 .stop-handle { cursor: grab; opacity: 0.5; }
 .stop-num { font-weight: 700; color: var(--c-1); width: 1.4em; }
 .stop-ville { margin-left: auto; opacity: 0.6; font-size: 13px; }
+.stop-time { width: 6.5em; padding: 3px 6px; border-radius: 6px; border: 1px solid rgba(128, 128, 128, 0.35);
+  background: transparent; color: inherit; font-variant-numeric: tabular-nums; }
 .stop-remove { border: 0; background: transparent; cursor: pointer; opacity: 0.6; }
 .map-wrap { min-height: 380px; height: 100%; border-radius: 12px; overflow: hidden; }
 

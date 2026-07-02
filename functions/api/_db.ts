@@ -1,15 +1,21 @@
 import type { D1Database } from '@cloudflare/workers-types'
 
 export interface Livreur { id: string; nom: string; prenom: string; telephone: string; colorIndex: number }
-export interface Stop { id: string; label: string; ville: string; lat: number; lng: number }
+export interface Stop { id: string; label: string; ville: string; lat: number; lng: number; heure?: string }
 export interface RouteResult {
   km: number; min: number; geometry: [number, number][]; optimized: boolean; approximate: boolean
 }
-export interface Tournee { id: string; livreurId: string; date: string; stops: Stop[]; route?: RouteResult }
+export interface Tournee {
+  id: string; livreurId: string; date: string; stops: Stop[]; route?: RouteResult
+  departHeure?: string; retourHeure?: string; ordreManuel?: boolean
+}
 export interface Adresse { id: string; label: string; ville: string; lat: number; lng: number }
 
 interface LivreurRow { id: string; nom: string; prenom: string; telephone: string; color_index: number; created_at: number }
-interface TourneeRow { id: string; livreur_id: string; date: string; stops_json: string; route_json: string | null; updated_at: number }
+interface TourneeRow {
+  id: string; livreur_id: string; date: string; stops_json: string; route_json: string | null; updated_at: number
+  depart_heure: string | null; retour_heure: string | null; ordre_manuel: number
+}
 interface AdresseRow { id: string; label: string; ville: string; lat: number; lng: number }
 
 function newId(): string {
@@ -23,6 +29,9 @@ const rowToTournee = (r: TourneeRow): Tournee => ({
   id: r.id, livreurId: r.livreur_id, date: r.date,
   stops: JSON.parse(r.stops_json) as Stop[],
   route: r.route_json ? (JSON.parse(r.route_json) as RouteResult) : undefined,
+  departHeure: r.depart_heure ?? undefined,
+  retourHeure: r.retour_heure ?? undefined,
+  ordreManuel: r.ordre_manuel === 1,
 })
 const rowToAdresse = (r: AdresseRow): Adresse => ({
   id: r.id, label: r.label, ville: r.ville, lat: r.lat, lng: r.lng,
@@ -98,7 +107,10 @@ export async function createTournee(
 export async function updateTournee(
   db: D1Database,
   id: string,
-  patch: { livreurId?: string; date?: string; stops?: Stop[]; route?: RouteResult | null },
+  patch: {
+    livreurId?: string; date?: string; stops?: Stop[]; route?: RouteResult | null
+    departHeure?: string; retourHeure?: string; ordreManuel?: boolean
+  },
 ): Promise<void> {
   const sets: string[] = []
   const vals: unknown[] = []
@@ -106,6 +118,9 @@ export async function updateTournee(
   if (patch.date !== undefined) { sets.push('date = ?'); vals.push(patch.date) }
   if (patch.stops !== undefined) { sets.push('stops_json = ?'); vals.push(JSON.stringify(patch.stops)) }
   if (patch.route !== undefined) { sets.push('route_json = ?'); vals.push(patch.route ? JSON.stringify(patch.route) : null) }
+  if (patch.departHeure !== undefined) { sets.push('depart_heure = ?'); vals.push(patch.departHeure || null) }
+  if (patch.retourHeure !== undefined) { sets.push('retour_heure = ?'); vals.push(patch.retourHeure || null) }
+  if (patch.ordreManuel !== undefined) { sets.push('ordre_manuel = ?'); vals.push(patch.ordreManuel ? 1 : 0) }
   sets.push('updated_at = ?'); vals.push(Date.now())
   vals.push(id)
   await db.prepare(`UPDATE tournees SET ${sets.join(', ')} WHERE id = ?`).bind(...vals).run()

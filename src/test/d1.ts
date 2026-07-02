@@ -1,13 +1,15 @@
 import Database from 'better-sqlite3'
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { resolve } from 'node:path'
 import type { D1Database } from '@cloudflare/workers-types'
 
 /** Construit une fausse D1 (en mémoire) qui imite l'interface utilisée par la couche d'accès. */
 export function makeTestDb(): D1Database {
   const sqlite = new Database(':memory:')
-  const sql = readFileSync(resolve(process.cwd(), 'migrations/0001_init.sql'), 'utf8')
-  sqlite.exec(sql)
+  const dir = resolve(process.cwd(), 'migrations')
+  for (const file of readdirSync(dir).filter((f) => f.endsWith('.sql')).sort()) {
+    sqlite.exec(readFileSync(resolve(dir, file), 'utf8'))
+  }
   return {
     prepare(query: string) {
       const stmt = sqlite.prepare(query)
