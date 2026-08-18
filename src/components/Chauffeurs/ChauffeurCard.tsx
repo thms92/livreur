@@ -1,6 +1,7 @@
 import type { Tournee } from '../../types'
 import type { LivreurWithColor } from '../../state/LivreurContext'
 import { printTourneeSheet } from '../../services/printSheet'
+import { formatDuree } from '../../lib/tourneeTime'
 
 interface Props {
   livreur: LivreurWithColor
@@ -20,7 +21,7 @@ export function ChauffeurCard({ livreur, tournees }: Props) {
         {livreur.telephone && <span className="muted">· {livreur.telephone}</span>}
         <span className="chauffeur-stats">
           {tournees.length
-            ? `${stopsTotal} arrêts · ${kmTotal.toFixed(0)} km · ${Math.round(minTotal)} min`
+            ? `${stopsTotal} arrêts · ${kmTotal.toFixed(0)} km · ${formatDuree(minTotal)}`
             : "Aucune tournée ce jour"}
         </span>
       </div>

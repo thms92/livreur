@@ -3,6 +3,7 @@ import { AddressAutocomplete } from '../AddressAutocomplete'
 import { TourneeMap } from '../map/TourneeMap'
 import { StopList } from './StopList'
 import { printTourneeSheet } from '../../services/printSheet'
+import { formatDuree } from '../../lib/tourneeTime'
 
 interface Props {
   tourneeId: string
@@ -90,7 +91,7 @@ export function TourneeEditor({ tourneeId, onClose }: Props) {
           </button>
           <span className="total">
             {tournee.route
-              ? `${tournee.route.km.toFixed(0)} km · ${Math.round(tournee.route.min)} min` +
+              ? `${tournee.route.km.toFixed(0)} km · ${formatDuree(tournee.route.min)}` +
                 (tournee.route.approximate ? ' (approx. hors-ligne)' : '')
               : '—'}
           </span>

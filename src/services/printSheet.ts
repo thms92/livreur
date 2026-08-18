@@ -1,6 +1,7 @@
 import type { Tournee } from '../types'
 import type { LivreurWithColor } from '../state/LivreurContext'
 import { DEPOT } from '../data/depot'
+import { formatDuree } from '../lib/tourneeTime'
 
 const LEAFLET_CSS = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'
 const LEAFLET_JS = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'
@@ -82,7 +83,7 @@ export function buildSheetHtml(tournee: Tournee, livreur: LivreurWithColor | und
   const tel = livreur?.telephone ? ` · ${esc(livreur.telephone)}` : ''
   const depotLine = `${DEPOT.label}, ${DEPOT.ville} (${DEPOT.codePostal})`
   const total = tournee.route
-    ? `${tournee.route.km.toFixed(0)} km · ${Math.round(tournee.route.min)} min` +
+    ? `${tournee.route.km.toFixed(0)} km · ${formatDuree(tournee.route.min)}` +
       (tournee.route.approximate ? ' (estimation hors-ligne)' : '')
     : ''
   const rows = tournee.stops

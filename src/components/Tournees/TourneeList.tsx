@@ -1,5 +1,5 @@
 import { useLivreur } from '../../state/LivreurContext'
-import { partitionTournees } from '../../lib/tourneeTime'
+import { formatDuree, partitionTournees } from '../../lib/tourneeTime'
 
 interface Props {
   onOpen: (tourneeId: string) => void
@@ -24,7 +24,7 @@ export function TourneeList({ onOpen, onDuplicate }: Props) {
             <span className="tournee-livreur">{l ? `${l.prenom} ${l.nom}` : '—'}</span>
             <span className="tournee-stats">
               {t.stops.length} arrêt(s)
-              {t.route ? ` · ${t.route.km.toFixed(0)} km · ${Math.round(t.route.min)} min` : ''}
+              {t.route ? ` · ${t.route.km.toFixed(0)} km · ${formatDuree(t.route.min)}` : ''}
             </span>
             <button className="btn-ghost" onClick={() => onOpen(t.id)}>Modifier</button>
             <button className="btn-ghost" onClick={() => onDuplicate(t.id)}>Dupliquer</button>

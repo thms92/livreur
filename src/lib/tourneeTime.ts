@@ -16,3 +16,15 @@ export function partitionTournees(
   for (const t of tournees) (isPast(t.date, today) ? past : upcoming).push(t)
   return { upcoming, past }
 }
+
+/**
+ * Formate une durée en minutes pour l'affichage : "1 h 12", "2 h", "45 min".
+ * En dessous d'une heure on reste en minutes, plus lisible qu'un "0 h 45".
+ */
+export function formatDuree(minutes: number): string {
+  const total = Math.round(minutes)
+  if (total < 60) return `${total} min`
+  const h = Math.floor(total / 60)
+  const m = total % 60
+  return m ? `${h} h ${String(m).padStart(2, '0')}` : `${h} h`
+}

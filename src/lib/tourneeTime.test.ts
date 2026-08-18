@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isPast, partitionTournees } from './tourneeTime'
+import { formatDuree, isPast, partitionTournees } from './tourneeTime'
 import type { Tournee } from '../types'
 
 const t = (id: string, date: string): Tournee => ({ id, livreurId: 'l', date, stops: [] })
@@ -18,5 +18,15 @@ describe('tourneeTime', () => {
     )
     expect(upcoming.map((x) => x.id)).toEqual(['b', 'c'])
     expect(past.map((x) => x.id)).toEqual(['a'])
+  })
+
+  it('formatDuree : heures + minutes, minutes seules sous 1 h', () => {
+    expect(formatDuree(0)).toBe('0 min')
+    expect(formatDuree(45)).toBe('45 min')
+    expect(formatDuree(59.6)).toBe('1 h')
+    expect(formatDuree(60)).toBe('1 h')
+    expect(formatDuree(72)).toBe('1 h 12')
+    expect(formatDuree(125)).toBe('2 h 05')
+    expect(formatDuree(1440)).toBe('24 h')
   })
 })

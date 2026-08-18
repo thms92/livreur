@@ -23,7 +23,7 @@ describe('buildSheetHtml', () => {
     expect(html).toContain('0612345678')
     expect(html).toContain('18/06/2026')
     expect(html).toContain('47 km')
-    expect(html).toContain('72 min')
+    expect(html).toContain('1 h 12')
   })
 
   it('place Letourville en départ ET en retour', () => {
