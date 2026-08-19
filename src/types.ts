@@ -28,8 +28,8 @@ export interface RouteResult {
   km: number
   min: number
   geometry: [number, number][] // polyligne [lat, lng]
-  optimized: boolean // ordre venu d'OSRM /trip
-  approximate: boolean // calcul de repli haversine (OSRM injoignable)
+  optimized: boolean // ordre venu de Valhalla /optimized_route
+  approximate: boolean // calcul de repli haversine (routeur injoignable)
 }
 
 export interface Tournee {
