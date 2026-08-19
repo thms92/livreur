@@ -8,6 +8,7 @@ export interface RouteResult {
 export interface Tournee {
   id: string; livreurId: string; date: string; stops: Stop[]; route?: RouteResult
   departHeure?: string; retourHeure?: string; ordreManuel?: boolean
+  sansPeage?: boolean // true = itinéraire évitant les péages (défaut des nouvelles tournées)
 }
 export interface Adresse { id: string; label: string; ville: string; lat: number; lng: number }
 
@@ -15,6 +16,7 @@ interface LivreurRow { id: string; nom: string; prenom: string; telephone: strin
 interface TourneeRow {
   id: string; livreur_id: string; date: string; stops_json: string; route_json: string | null; updated_at: number
   depart_heure: string | null; retour_heure: string | null; ordre_manuel: number
+  sans_peage: number
 }
 interface AdresseRow { id: string; label: string; ville: string; lat: number; lng: number }
 
@@ -32,6 +34,7 @@ const rowToTournee = (r: TourneeRow): Tournee => ({
   departHeure: r.depart_heure ?? undefined,
   retourHeure: r.retour_heure ?? undefined,
   ordreManuel: r.ordre_manuel === 1,
+  sansPeage: r.sans_peage === 1,
 })
 const rowToAdresse = (r: AdresseRow): Adresse => ({
   id: r.id, label: r.label, ville: r.ville, lat: r.lat, lng: r.lng,
@@ -96,7 +99,10 @@ export async function createTournee(
   db: D1Database,
   input: { livreurId: string; date: string },
 ): Promise<Tournee> {
-  const tournee: Tournee = { id: newId(), livreurId: input.livreurId, date: input.date, stops: [] }
+  // sans_peage n'est pas dans l'INSERT : la colonne porte le défaut (1 = sans péage).
+  const tournee: Tournee = {
+    id: newId(), livreurId: input.livreurId, date: input.date, stops: [], sansPeage: true,
+  }
   await db
     .prepare('INSERT INTO tournees (id, livreur_id, date, stops_json, route_json, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
     .bind(tournee.id, tournee.livreurId, tournee.date, '[]', null, Date.now())
@@ -110,6 +116,7 @@ export async function updateTournee(
   patch: {
     livreurId?: string; date?: string; stops?: Stop[]; route?: RouteResult | null
     departHeure?: string; retourHeure?: string; ordreManuel?: boolean
+    sansPeage?: boolean
   },
 ): Promise<void> {
   const sets: string[] = []
@@ -121,6 +128,7 @@ export async function updateTournee(
   if (patch.departHeure !== undefined) { sets.push('depart_heure = ?'); vals.push(patch.departHeure || null) }
   if (patch.retourHeure !== undefined) { sets.push('retour_heure = ?'); vals.push(patch.retourHeure || null) }
   if (patch.ordreManuel !== undefined) { sets.push('ordre_manuel = ?'); vals.push(patch.ordreManuel ? 1 : 0) }
+  if (patch.sansPeage !== undefined) { sets.push('sans_peage = ?'); vals.push(patch.sansPeage ? 1 : 0) }
   sets.push('updated_at = ?'); vals.push(Date.now())
   vals.push(id)
   await db.prepare(`UPDATE tournees SET ${sets.join(', ')} WHERE id = ?`).bind(...vals).run()

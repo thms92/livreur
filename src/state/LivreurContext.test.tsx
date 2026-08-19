@@ -32,6 +32,7 @@ vi.mock('../services/api', () => {
 })
 
 import { api } from '../services/api'
+import { computeRoute, optimizeTrip } from '../services/routing'
 
 const wrapper = ({ children }: { children: ReactNode }) => <LivreurProvider>{children}</LivreurProvider>
 
@@ -117,5 +118,50 @@ describe('LivreurContext (API)', () => {
     expect(api.deleteLivreur).toHaveBeenCalledWith(id)
     expect(result.current.livreurs).toEqual([])
     expect(result.current.tournees).toEqual([])
+  })
+
+  async function tourneeAvecArret() {
+    const hook = await ready()
+    const { result } = hook
+    await act(async () => { await result.current.addLivreur({ nom: 'B', prenom: 'K', telephone: '' }) })
+    let tid = ''
+    await act(async () => {
+      tid = await result.current.addTournee({ livreurId: result.current.livreurs[0].id, date: '2026-08-19' })
+    })
+    await act(async () => {
+      await result.current.addStopToTournee(tid, { id: 'ban-1', label: 'A', ville: 'V', lat: 48, lng: 1 })
+    })
+    return { result, tid }
+  }
+
+  it('setSansPeage : recalcule dans le mode demandé et le persiste', async () => {
+    const { result, tid } = await tourneeAvecArret()
+    vi.mocked(computeRoute).mockClear()
+
+    await act(async () => { await result.current.setSansPeage(tid, false) })
+
+    expect(computeRoute).toHaveBeenCalledWith(expect.anything(), { sansPeage: false })
+    expect(result.current.tournees[0].sansPeage).toBe(false)
+    expect(vi.mocked(api.updateTournee).mock.calls.at(-1)?.[1]).toMatchObject({ sansPeage: false })
+  })
+
+  it('les recalculs ultérieurs conservent le mode de la tournée', async () => {
+    const { result, tid } = await tourneeAvecArret()
+    await act(async () => { await result.current.setSansPeage(tid, false) })
+    vi.mocked(computeRoute).mockClear()
+
+    await act(async () => { await result.current.refreshRoute(tid) })
+
+    expect(computeRoute).toHaveBeenCalledWith(expect.anything(), { sansPeage: false })
+  })
+
+  it('l’optimisation d’ordre respecte aussi le mode', async () => {
+    const { result, tid } = await tourneeAvecArret()
+    await act(async () => { await result.current.setSansPeage(tid, false) })
+    vi.mocked(optimizeTrip).mockClear()
+
+    await act(async () => { await result.current.optimizeTournee(tid) })
+
+    expect(optimizeTrip).toHaveBeenCalledWith(expect.anything(), { sansPeage: false })
   })
 })

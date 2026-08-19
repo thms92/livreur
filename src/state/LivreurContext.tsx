@@ -12,6 +12,20 @@ import { usePersistentState } from './usePersistentState'
 
 const defaultProvider = new BanProvider()
 
+/** Champs de tournée persistables en plus des stops/route (heures, verrou d'ordre, péage). */
+type TourneeExtra = {
+  departHeure?: string; retourHeure?: string; ordreManuel?: boolean; sansPeage?: boolean
+}
+
+/**
+ * Mode d'itinéraire à utiliser pour un recalcul : celui que la bascule vient d'imposer,
+ * sinon celui stocké sur la tournée, sinon le défaut (sans péage).
+ * Pure et hors composant : rien à réinstancier à chaque rendu.
+ */
+const modeOf = (t: Tournee | undefined, extra?: TourneeExtra) => ({
+  sansPeage: extra?.sansPeage ?? t?.sansPeage ?? true,
+})
+
 export interface LivreurInput { nom: string; prenom: string; telephone: string }
 export type LivreurWithColor = Livreur & { couleur: string }
 
@@ -43,6 +57,7 @@ export interface LivreurState {
   sortTourneeByTime: (tourneeId: string) => Promise<void>
   optimizeTournee: (tourneeId: string) => Promise<void>
   refreshRoute: (tourneeId: string) => Promise<void>
+  setSansPeage: (tourneeId: string, sansPeage: boolean) => Promise<void>
   removeAdresse: (id: string) => Promise<void>
 }
 
@@ -161,9 +176,6 @@ export function LivreurProvider({ children }: { children: ReactNode }) {
     try { await api.deleteTournee(id) } catch (e) { setTournees(prev); fail(e) }
   }, [tournees, fail])
 
-  // Champs de tournée persistables en plus des stops/route (heures, verrou d'ordre).
-  type TourneeExtra = { departHeure?: string; retourHeure?: string; ordreManuel?: boolean }
-
   // Persiste stops + route (+ champs annexes) d'une tournée donnée.
   const persistStops = useCallback(
     async (id: string, stops: Stop[], route: Tournee['route'], prev: Tournee[], extra?: TourneeExtra) => {
@@ -174,11 +186,11 @@ export function LivreurProvider({ children }: { children: ReactNode }) {
     [fail],
   )
 
-  // Applique un nouvel ordre d'arrêts : maj optimiste, recalcul du trajet (OSRM /route), persistance.
+  // Applique un nouvel ordre d'arrêts : maj optimiste, recalcul du trajet, persistance.
   const recompute = useCallback(
     async (tourneeId: string, stops: Stop[], prev: Tournee[], extra?: TourneeExtra) => {
       setTournees((p) => p.map((x) => (x.id === tourneeId ? { ...x, ...extra, stops, route: undefined } : x)))
-      const route = await computeRoute(stops)
+      const route = await computeRoute(stops, modeOf(prev.find((x) => x.id === tourneeId), extra))
       setTournees((p) => p.map((x) => (x.id === tourneeId ? { ...x, route } : x)))
       try {
         await api.updateTournee(tourneeId, { stops, route, ...extra })
@@ -262,7 +274,7 @@ export function LivreurProvider({ children }: { children: ReactNode }) {
     const prev = tournees
     const t = prev.find((x) => x.id === tourneeId)
     if (!t) return
-    const { order, route } = await optimizeTrip(t.stops)
+    const { order, route } = await optimizeTrip(t.stops, modeOf(t))
     const stops = order.map((i) => t.stops[i])
     // L'optimisation géographique impose un ordre : on le considère comme manuel.
     setTournees((p) => p.map((x) => (x.id === tourneeId ? { ...x, stops, route, ordreManuel: true } : x)))
@@ -273,10 +285,18 @@ export function LivreurProvider({ children }: { children: ReactNode }) {
     const prev = tournees
     const t = prev.find((x) => x.id === tourneeId)
     if (!t) return
-    const route = await computeRoute(t.stops)
+    const route = await computeRoute(t.stops, modeOf(t))
     setTournees((p) => p.map((x) => (x.id === tourneeId ? { ...x, route } : x)))
     await persistStops(tourneeId, t.stops, route, prev)
   }, [tournees, persistStops])
+
+  /** Bascule péage / sans péage : recalcule l'itinéraire dans le nouveau mode et le persiste. */
+  const setSansPeage = useCallback(async (tourneeId: string, sansPeage: boolean) => {
+    const prev = tournees
+    const t = prev.find((x) => x.id === tourneeId)
+    if (!t) return
+    await recompute(tourneeId, t.stops, prev, { sansPeage })
+  }, [tournees, recompute])
 
   const removeAdresse = useCallback(async (id: string) => {
     const prev = adresses
@@ -291,7 +311,7 @@ export function LivreurProvider({ children }: { children: ReactNode }) {
     addTournee, duplicateTournee, updateTournee, removeTournee,
     addStopToTournee, removeStopFromTournee, reorderStops,
     setStopHeure, setTourneeHeure, sortTourneeByTime,
-    optimizeTournee, refreshRoute, removeAdresse,
+    optimizeTournee, refreshRoute, setSansPeage, removeAdresse,
   }
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }

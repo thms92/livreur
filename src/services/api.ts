@@ -35,6 +35,7 @@ export const api = {
     patch: {
       livreurId?: string; date?: string; stops?: Stop[]; route?: RouteResult | null
       departHeure?: string; retourHeure?: string; ordreManuel?: boolean
+      sansPeage?: boolean
     },
   ) => req<{ ok: true }>(`/api/tournees/${id}`, 'PUT', patch),
   deleteTournee: (id: string) => req<{ ok: true }>(`/api/tournees/${id}`, 'DELETE'),

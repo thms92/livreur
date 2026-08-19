@@ -27,3 +27,6 @@ dist-ssr
 
 .wrangler/
 *.sqlite
+
+# Sauvegardes de la base (donnees clients) — ne jamais versionner
+backups/

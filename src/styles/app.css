@@ -61,6 +61,7 @@ button { font-family: inherit; cursor: pointer; }
 .field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
 .field.inline { flex-direction: row; align-items: center; gap: 8px; }
 .field input, .field select { padding: 8px 10px; border: 1px solid rgba(128, 128, 128, 0.35); border-radius: 8px; }
+.field input[type='checkbox'] { width: auto; padding: 0; margin: 0; accent-color: var(--c-1); }
 .btn-primary { padding: 9px 16px; border: 0; border-radius: 8px; background: var(--c-1); color: #fff; cursor: pointer; }
 .btn-ghost { padding: 8px 12px; border: 1px solid rgba(128, 128, 128, 0.35); border-radius: 8px; background: transparent; cursor: pointer; }
 .btn-danger { padding: 7px 12px; border: 0; border-radius: 8px; background: #e5484d; color: #fff; cursor: pointer; }

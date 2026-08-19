@@ -86,6 +86,8 @@ export function buildSheetHtml(tournee: Tournee, livreur: LivreurWithColor | und
     ? `${tournee.route.km.toFixed(0)} km · ${formatDuree(tournee.route.min)}` +
       (tournee.route.approximate ? ' (estimation hors-ligne)' : '')
     : ''
+  // Le livreur doit savoir si l'itinéraire imprimé évite les péages ou non.
+  const modePeage = (tournee.sansPeage ?? true) ? 'Sans péage' : 'Péages autorisés'
   const rows = tournee.stops
     .map(
       (s, i) =>
@@ -126,7 +128,7 @@ export function buildSheetHtml(tournee: Tournee, livreur: LivreurWithColor | und
   <h1>Feuille de tournée</h1>
   <div class="meta"><b>${esc(nom)}</b>${tel}<br>Date : ${esc(formatDateFr(tournee.date))}${
     total ? `<br>Total : ${esc(total)}` : ''
-  }</div>
+  }<br>Itinéraire : ${esc(modePeage)}</div>
   <div id="map"></div>
   <ol>
     <li class="depot">🏭 Départ — ${esc(depotLine)}${departH}</li>

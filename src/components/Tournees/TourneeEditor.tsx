@@ -25,6 +25,7 @@ export function TourneeEditor({ tourneeId, onClose }: Props) {
     setTourneeHeure,
     sortTourneeByTime,
     optimizeTournee,
+    setSansPeage,
   } = useLivreur()
 
   const tournee = tournees.find((t) => t.id === tourneeId)
@@ -78,6 +79,15 @@ export function TourneeEditor({ tourneeId, onClose }: Props) {
           onDepartHeure={(heure) => setTourneeHeure(tournee.id, { departHeure: heure })}
           onRetourHeure={(heure) => setTourneeHeure(tournee.id, { retourHeure: heure })}
         />
+
+        <label className="field inline">
+          <input
+            type="checkbox"
+            checked={tournee.sansPeage ?? true}
+            onChange={(e) => setSansPeage(tournee.id, e.target.checked)}
+          />
+          <span>Sans péage</span>
+        </label>
 
         <div className="editor-footer">
           <button className="btn-ghost" onClick={() => sortTourneeByTime(tournee.id)}>

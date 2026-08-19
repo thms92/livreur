@@ -69,4 +69,14 @@ describe('buildSheetHtml', () => {
     // les coordonnées des arrêts sont injectées pour les marqueurs
     expect(html).toContain('"lat":48')
   })
+
+  it('annonce le mode sans péage au livreur', () => {
+    const html = buildSheetHtml({ ...tournee, sansPeage: true }, livreur)
+    expect(html).toContain('Sans péage')
+  })
+
+  it('annonce le mode péages autorisés', () => {
+    const html = buildSheetHtml({ ...tournee, sansPeage: false }, livreur)
+    expect(html).toContain('Péages autorisés')
+  })
 })

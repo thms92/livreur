@@ -80,3 +80,30 @@ describe('_db — adresses', () => {
     expect((await getState(db)).adresses).toEqual([])
   })
 })
+
+describe('_db — option péage', () => {
+  it('une tournée créée est sans péage par défaut', async () => {
+    const db = makeTestDb()
+    const l = await createLivreur(db, { nom: 'B', prenom: 'K' })
+    const t = await createTournee(db, { livreurId: l.id, date: '2026-08-19' })
+    expect(t.sansPeage).toBe(true)
+    expect((await getState(db)).tournees[0].sansPeage).toBe(true)
+  })
+
+  it('bascule en mode péage autorisé et le relit', async () => {
+    const db = makeTestDb()
+    const l = await createLivreur(db, { nom: 'B', prenom: 'K' })
+    const t = await createTournee(db, { livreurId: l.id, date: '2026-08-19' })
+    await updateTournee(db, t.id, { sansPeage: false })
+    expect((await getState(db)).tournees[0].sansPeage).toBe(false)
+  })
+
+  it('une mise à jour qui ne parle pas de péage ne change pas le mode', async () => {
+    const db = makeTestDb()
+    const l = await createLivreur(db, { nom: 'B', prenom: 'K' })
+    const t = await createTournee(db, { livreurId: l.id, date: '2026-08-19' })
+    await updateTournee(db, t.id, { sansPeage: false })
+    await updateTournee(db, t.id, { date: '2026-08-20' })
+    expect((await getState(db)).tournees[0].sansPeage).toBe(false)
+  })
+})

@@ -41,6 +41,7 @@ export interface Tournee {
   departHeure?: string // heure de départ du dépôt, "HH:MM" (24h), saisie manuelle
   retourHeure?: string // heure de retour au dépôt, "HH:MM" (24h), saisie manuelle
   ordreManuel?: boolean // true = ordre figé manuellement ; sinon tri chronologique auto
+  sansPeage?: boolean // true = itinéraire évitant les péages (défaut des nouvelles tournées)
 }
 
 export interface Suggestion {

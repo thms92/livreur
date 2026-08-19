@@ -9,8 +9,9 @@ Trois sections (barre latérale gauche) :
 - **Livreurs** — liste des livreurs ; ajout par Nom, Prénom, Téléphone ; suppression (cascade sur
   les tournées du livreur).
 - **Tournées** — créer / modifier / supprimer une tournée : choix du livreur, date, ajout d'arrêts
-  par **autocomplétion d'adresse (BAN)**. Ordre **optimisé automatiquement** (OSRM), **réordonnable
+  par **autocomplétion d'adresse (BAN)**. Ordre **optimisé automatiquement** (Valhalla), **réordonnable
   à la main** (glisser-déposer), bouton « Ré-optimiser », total km/temps, carte de la boucle.
+  Option **« Sans péage »** (cochée par défaut) : bascule l'itinéraire et le recalcule.
 - **Chauffeurs** — vue d'ensemble filtrée par date (sélecteur ne listant que les jours ayant des
   tournées) : une carte colorée par chauffeur (1 couleur = 1 chauffeur) avec ses tournées du jour,
   plus une carte commune.
@@ -28,12 +29,15 @@ utilisateurs. **Aucune authentification** (accès libre par l'URL — choix assu
 restreint). Le front charge l'état au démarrage et applique des mises à jour **optimistes avec
 rollback**.
 
-Schéma : `migrations/` (`0001_init.sql`, `0002_horaires.sql`). Configuration : `wrangler.toml` (binding `DB`).
+Schéma : `migrations/` (`0001_init.sql`, `0002_horaires.sql`, `0003_peage.sql`). Configuration : `wrangler.toml` (binding `DB`).
 
 ```bash
 # créer/migrer la base (rejouer chaque migration dans l'ordre)
 npx wrangler d1 execute livreur-db --remote --file migrations/0001_init.sql
 npx wrangler d1 execute livreur-db --remote --file migrations/0002_horaires.sql
+npx wrangler d1 execute livreur-db --remote --file migrations/0003_peage.sql
+# sauvegarde avant migration (fortement conseillé)
+npx wrangler d1 export livreur-db --remote --output backup.sql
 # déployer (build + Functions + binding D1)
 npm run build && npx wrangler pages deploy dist --project-name=livreur --branch=main
 # dev local (Functions + D1 locale)
@@ -60,9 +64,12 @@ npx tsc -p functions/tsconfig.json   # type-check des Pages Functions
 - `src/services/` — logique pure testée :
   - `addressProvider.ts` — `AddressProvider` + `BanProvider` : géocodage via l'**API Adresse (BAN)**
     `api-adresse.data.gouv.fr` (`suggest`/`geocodeFirst`).
-  - `routing.ts` — **OSRM** (`router.project-osrm.org`, gratuit) : `optimizeTrip` (`/trip`, ordre
-    optimisé + boucle depuis le dépôt) et `computeRoute` (`/route`, ordre donné). **Repli haversine**
-    hors-ligne si OSRM est injoignable.
+  - `routing.ts` — **Valhalla** (`valhalla1.openstreetmap.de`, FOSSGIS, sans clé) :
+    `optimizeTrip` (`/optimized_route`, ordre optimisé, dépôt fixe aux deux bouts) et `computeRoute`
+    (`/route`, ordre donné). L'option péage passe par `costing_options.auto.use_tolls` (0 = éviter).
+    **Repli haversine** hors-ligne si Valhalla est injoignable.
+    OSRM a été abandonné : son instance publique refuse `exclude=toll`.
+  - `polyline.ts` — décodage des tracés Valhalla (polyligne encodée, précision 6).
   - `geo.ts` — distances **haversine** (utilisé par le repli).
   - `stopId.ts` — génération d'identifiants.
 - `src/state/` — `LivreurContext` (livreurs + tournées + actions CRUD, `provider` injectable),
@@ -72,7 +79,11 @@ npx tsc -p functions/tsconfig.json   # type-check des Pages Functions
 
 La carte est une **carte Leaflet** (tuiles **CARTO** Positron/dark_matter selon le thème), isolée
 dans `components/map/` (`BaseMap`, `TourneeMap`, `pins`). Le tracé affiché vient de la géométrie
-routière OSRM.
+routière Valhalla.
+
+> **Note sur les durées** — Valhalla estime des temps de trajet ~20 % supérieurs à ceux d'OSRM sur
+> les mêmes routes (les distances, elles, concordent). Les tournées calculées avant la bascule
+> gardent leurs valeurs OSRM tant qu'elles ne sont pas recalculées.
 
 ## Documents
 

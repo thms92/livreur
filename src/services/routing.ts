@@ -1,16 +1,24 @@
 import type { LatLng, RouteResult, Stop } from '../types'
 import { DEPOT } from '../data/depot'
 import { routeLengthKm } from './geo'
+import { decodePolyline6 } from './polyline'
 
-const OSRM = 'https://router.project-osrm.org'
+// Valhalla (instance publique FOSSGIS) : contrairement à OSRM, il sait éviter les péages.
+const VALHALLA = 'https://valhalla1.openstreetmap.de'
 const AVG_KMH = 50 // vitesse moyenne pour estimer la durée en mode repli
 
-function coordsParam(pts: LatLng[]): string {
-  return pts.map((p) => `${p.lng},${p.lat}`).join(';')
+/** Mode d'itinéraire. Sans péage par défaut. */
+export interface RouteOptions {
+  sansPeage?: boolean
 }
 
-function toLatLngPath(coords: [number, number][]): [number, number][] {
-  return coords.map(([lng, lat]) => [lat, lng])
+interface Leg {
+  shape: string
+}
+interface Trip {
+  summary: { length: number; time: number }
+  legs: Leg[]
+  locations?: { original_index: number }[]
 }
 
 function emptyRoute(optimized: boolean): RouteResult {
@@ -30,43 +38,52 @@ function fallbackRoute(stops: Stop[]): RouteResult {
   }
 }
 
-interface TripResponse {
-  code: string
-  waypoints: { waypoint_index: number }[]
-  trips: { distance: number; duration: number; geometry: { coordinates: [number, number][] } }[]
+/** Recolle les tronçons en supprimant le point de jonction répété entre deux legs. */
+function joinLegs(legs: Leg[]): [number, number][] {
+  return legs.flatMap((leg, i) => {
+    const pts = decodePolyline6(leg.shape)
+    return i === 0 ? pts : pts.slice(1)
+  })
 }
 
-interface RouteResponse {
-  code: string
-  routes: { distance: number; duration: number; geometry: { coordinates: [number, number][] } }[]
+async function askValhalla(path: string, pts: LatLng[], sansPeage: boolean): Promise<Trip> {
+  const res = await fetch(`${VALHALLA}${path}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      locations: pts.map((p) => ({ lat: p.lat, lon: p.lng })),
+      costing: 'auto',
+      costing_options: { auto: { use_tolls: sansPeage ? 0 : 1 } },
+    }),
+  })
+  if (!res.ok) throw new Error('valhalla')
+  const data = (await res.json()) as { trip?: Trip }
+  if (!data.trip) throw new Error('valhalla')
+  return data.trip
 }
 
 /**
- * Optimise l'ordre des arrêts (TSP) via OSRM /trip, boucle au départ du dépôt.
+ * Optimise l'ordre des arrêts (TSP) via Valhalla /optimized_route.
+ * Le dépôt reste fixe en première et dernière position.
  * Renvoie l'ordre (indices dans `stops`, ordre de visite) + la route.
  */
-export async function optimizeTrip(stops: Stop[]): Promise<{ order: number[]; route: RouteResult }> {
+export async function optimizeTrip(
+  stops: Stop[],
+  opts: RouteOptions = {},
+): Promise<{ order: number[]; route: RouteResult }> {
   if (stops.length === 0) return { order: [], route: emptyRoute(true) }
-  const pts = [DEPOT, ...stops]
-  const url =
-    `${OSRM}/trip/v1/driving/${coordsParam(pts)}` +
-    `?source=first&roundtrip=true&geometries=geojson&overview=full`
+  const pts = [DEPOT, ...stops, DEPOT]
   try {
-    const res = await fetch(url)
-    if (!res.ok) throw new Error('osrm')
-    const data = (await res.json()) as TripResponse
-    if (data.code !== 'Ok') throw new Error('osrm')
-    const wp = data.waypoints
-    const order = stops
-      .map((_, i) => i)
-      .sort((a, b) => wp[a + 1].waypoint_index - wp[b + 1].waypoint_index)
-    const trip = data.trips[0]
+    const trip = await askValhalla('/optimized_route', pts, opts.sansPeage ?? true)
+    if (!trip.locations) throw new Error('valhalla')
+    // On retire le dépôt aux deux bouts ; les indices restants pointent dans `stops` (décalés de 1).
+    const order = trip.locations.slice(1, -1).map((l) => l.original_index - 1)
     return {
       order,
       route: {
-        km: trip.distance / 1000,
-        min: trip.duration / 60,
-        geometry: toLatLngPath(trip.geometry.coordinates),
+        km: trip.summary.length,
+        min: trip.summary.time / 60,
+        geometry: joinLegs(trip.legs),
         optimized: true,
         approximate: false,
       },
@@ -77,20 +94,15 @@ export async function optimizeTrip(stops: Stop[]): Promise<{ order: number[]; ro
 }
 
 /** Calcule km/min/tracé sur l'ordre DONNÉ (sans réoptimiser). Boucle dépôt -> arrêts -> dépôt. */
-export async function computeRoute(stops: Stop[]): Promise<RouteResult> {
+export async function computeRoute(stops: Stop[], opts: RouteOptions = {}): Promise<RouteResult> {
   if (stops.length === 0) return emptyRoute(false)
   const pts = [DEPOT, ...stops, DEPOT]
-  const url = `${OSRM}/route/v1/driving/${coordsParam(pts)}?geometries=geojson&overview=full`
   try {
-    const res = await fetch(url)
-    if (!res.ok) throw new Error('osrm')
-    const data = (await res.json()) as RouteResponse
-    if (data.code !== 'Ok') throw new Error('osrm')
-    const r = data.routes[0]
+    const trip = await askValhalla('/route', pts, opts.sansPeage ?? true)
     return {
-      km: r.distance / 1000,
-      min: r.duration / 60,
-      geometry: toLatLngPath(r.geometry.coordinates),
+      km: trip.summary.length,
+      min: trip.summary.time / 60,
+      geometry: joinLegs(trip.legs),
       optimized: false,
       approximate: false,
     }
