@@ -32,6 +32,13 @@
   --map-seine:    #dde9f0;
   --map-dot-idle: #c4c4bd;
 
+  /* pastilles de mode d'itinéraire — distinctes de la palette chauffeurs,
+     pour ne pas se confondre avec le liseré de couleur du livreur */
+  --peage-sans-bg: oklch(0.94 0.04 152);
+  --peage-sans-fg: oklch(0.45 0.10 152);
+  --peage-avec-bg: oklch(0.94 0.04 66);
+  --peage-avec-fg: oklch(0.46 0.09 66);
+
   --radius: 9px;
   --radius-sm: 6px;
   --font-ui: "IBM Plex Sans", system-ui, sans-serif;
@@ -66,4 +73,9 @@
   --map-road:     #26262b;
   --map-seine:    #182530;
   --map-dot-idle: #3a3a40;
+
+  --peage-sans-bg: oklch(0.28 0.05 152);
+  --peage-sans-fg: oklch(0.80 0.11 152);
+  --peage-avec-bg: oklch(0.28 0.05 66);
+  --peage-avec-fg: oklch(0.82 0.11 66);
 }

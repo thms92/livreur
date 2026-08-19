@@ -85,6 +85,10 @@ button { font-family: inherit; cursor: pointer; }
 .tournee-date { font-weight: 700; font-variant-numeric: tabular-nums; }
 .tournee-row .btn-ghost { margin-left: auto; }
 
+.peage-badge { font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 999px; white-space: nowrap; letter-spacing: 0.01em; }
+.peage-sans { background: var(--peage-sans-bg); color: var(--peage-sans-fg); }
+.peage-avec { background: var(--peage-avec-bg); color: var(--peage-avec-fg); }
+
 .tournee-editor { display: grid; grid-template-columns: minmax(360px, 1fr) 1fr; gap: 20px; height: calc(100vh - 48px); }
 .editor-form { display: flex; flex-direction: column; gap: 14px; overflow: auto; }
 .editor-head { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }

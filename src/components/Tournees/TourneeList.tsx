@@ -1,5 +1,6 @@
 import { useLivreur } from '../../state/LivreurContext'
 import { formatDuree, partitionTournees } from '../../lib/tourneeTime'
+import { PeageBadge } from './PeageBadge'
 
 interface Props {
   onOpen: (tourneeId: string) => void
@@ -26,6 +27,7 @@ export function TourneeList({ onOpen, onDuplicate }: Props) {
               {t.stops.length} arrêt(s)
               {t.route ? ` · ${t.route.km.toFixed(0)} km · ${formatDuree(t.route.min)}` : ''}
             </span>
+            <PeageBadge sansPeage={t.sansPeage} />
             <button className="btn-ghost" onClick={() => onOpen(t.id)}>Modifier</button>
             <button className="btn-ghost" onClick={() => onDuplicate(t.id)}>Dupliquer</button>
             <button className="btn-danger" onClick={() => confirm('Supprimer cette tournée ?') && removeTournee(t.id)}>
