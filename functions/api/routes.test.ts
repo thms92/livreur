@@ -3,7 +3,7 @@ import { makeTestDb } from '../../src/test/d1'
 import { onRequestGet as getState } from './state'
 import { onRequestPost as postLivreur } from './livreurs/index'
 import { onRequestDelete as deleteLivreur } from './livreurs/[id]'
-import { onRequestPut as putTournee } from './tournees/[id]'
+import { onRequestPut as putTournee, onRequestDelete as deleteTourneeRoute } from './tournees/[id]'
 import { createLivreur, createTournee, deleteTournee } from './_db'
 import type { D1Database } from '@cloudflare/workers-types'
 
@@ -50,6 +50,18 @@ describe('routes API', () => {
     const vu = state.livreurs.find((l: { id: string }) => l.id === id)
     expect(vu).toBeDefined()
     expect(vu.deletedAt).toBeGreaterThan(0)
+  })
+
+  it('DELETE /livreurs/:id — l’en-tête X-Operateur est reporté dans deleted_by', async () => {
+    const db = makeTestDb()
+    const created = await postLivreur(ctx(db, { body: { nom: 'B', prenom: 'K' } }))
+    const { id } = await created.json()
+
+    const res = await deleteLivreur(ctx(db, { params: { id }, headers: { 'X-Operateur': 'Thomas' } }))
+
+    expect(res.status).toBe(200)
+    const row = await db.prepare('SELECT deleted_by FROM livreurs WHERE id = ?').bind(id).first<{ deleted_by: string }>()
+    expect(row?.deleted_by).toBe('Thomas')
   })
 })
 
@@ -117,5 +129,42 @@ describe('PUT /tournees/:id — verrou optimiste (409/410)', () => {
       .bind(t.id)
       .first<{ updated_by: string }>()
     expect(row?.updated_by).toBe('Thomas')
+  })
+})
+
+// La Corbeille doit pouvoir afficher « supprimée par Z le … » : sans ce report, deleted_by
+// resterait NULL pour toute tournée supprimée depuis la route, et l'écran serait vide en
+// permanence.
+describe('DELETE /tournees/:id — attribution', () => {
+  it('l’en-tête X-Operateur est reporté dans deleted_by', async () => {
+    const db = makeTestDb()
+    const l = await createLivreur(db, { nom: 'B', prenom: 'K' })
+    const t = await createTournee(db, { livreurId: l.id, date: '2026-09-22' })
+
+    const res = await deleteTourneeRoute(ctx(db, {
+      method: 'DELETE', params: { id: t.id }, headers: { 'X-Operateur': 'Thomas' },
+    }))
+
+    expect(res.status).toBe(200)
+    const row = await db
+      .prepare('SELECT deleted_by FROM tournees WHERE id = ?')
+      .bind(t.id)
+      .first<{ deleted_by: string }>()
+    expect(row?.deleted_by).toBe('Thomas')
+  })
+
+  it('sans en-tête, la suppression passe et deleted_by reste NULL', async () => {
+    const db = makeTestDb()
+    const l = await createLivreur(db, { nom: 'B', prenom: 'K' })
+    const t = await createTournee(db, { livreurId: l.id, date: '2026-09-22' })
+
+    const res = await deleteTourneeRoute(ctx(db, { method: 'DELETE', params: { id: t.id } }))
+
+    expect(res.status).toBe(200)
+    const row = await db
+      .prepare('SELECT deleted_by FROM tournees WHERE id = ?')
+      .bind(t.id)
+      .first<{ deleted_by: string | null }>()
+    expect(row?.deleted_by).toBeNull()
   })
 })
