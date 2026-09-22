@@ -33,13 +33,15 @@ describe('routes API', () => {
     expect(res.status).toBe(400)
   })
 
-  it('DELETE /livreurs/:id supprime', async () => {
+  it('DELETE /livreurs/:id marque le livreur sans le supprimer (corbeille)', async () => {
     const db = makeTestDb()
     const created = await postLivreur(ctx(db, { body: { nom: 'B', prenom: 'K' } }))
     const { id } = await created.json()
     const res = await deleteLivreur(ctx(db, { params: { id } }))
     expect(res.status).toBe(200)
     const state = await (await getState({ env: { DB: db } } as never)).json()
-    expect(state.livreurs).toEqual([])
+    const vu = state.livreurs.find((l: { id: string }) => l.id === id)
+    expect(vu).toBeDefined()
+    expect(vu.deletedAt).toBeGreaterThan(0)
   })
 })

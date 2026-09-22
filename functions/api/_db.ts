@@ -1,6 +1,9 @@
 import type { D1Database } from '@cloudflare/workers-types'
 
-export interface Livreur { id: string; nom: string; prenom: string; telephone: string; colorIndex: number }
+export interface Livreur {
+  id: string; nom: string; prenom: string; telephone: string; colorIndex: number
+  deletedAt?: number
+}
 export interface Stop { id: string; label: string; ville: string; lat: number; lng: number; heure?: string }
 export interface RouteResult {
   km: number; min: number; geometry: [number, number][]; optimized: boolean; approximate: boolean
@@ -9,14 +12,20 @@ export interface Tournee {
   id: string; livreurId: string; date: string; stops: Stop[]; route?: RouteResult
   departHeure?: string; retourHeure?: string; ordreManuel?: boolean
   sansPeage?: boolean // true = itinéraire évitant les péages (défaut des nouvelles tournées)
+  deletedAt?: number
+  deletedBy?: string
 }
 export interface Adresse { id: string; label: string; ville: string; lat: number; lng: number }
 
-interface LivreurRow { id: string; nom: string; prenom: string; telephone: string; color_index: number; created_at: number }
+interface LivreurRow {
+  id: string; nom: string; prenom: string; telephone: string; color_index: number; created_at: number
+  deleted_at: number | null
+}
 interface TourneeRow {
   id: string; livreur_id: string; date: string; stops_json: string; route_json: string | null; updated_at: number
   depart_heure: string | null; retour_heure: string | null; ordre_manuel: number
   sans_peage: number
+  deleted_at: number | null; deleted_by: string | null
 }
 interface AdresseRow { id: string; label: string; ville: string; lat: number; lng: number }
 
@@ -26,6 +35,7 @@ function newId(): string {
 
 const rowToLivreur = (r: LivreurRow): Livreur => ({
   id: r.id, nom: r.nom, prenom: r.prenom, telephone: r.telephone, colorIndex: r.color_index,
+  deletedAt: r.deleted_at ?? undefined,
 })
 const rowToTournee = (r: TourneeRow): Tournee => ({
   id: r.id, livreurId: r.livreur_id, date: r.date,
@@ -35,15 +45,20 @@ const rowToTournee = (r: TourneeRow): Tournee => ({
   retourHeure: r.retour_heure ?? undefined,
   ordreManuel: r.ordre_manuel === 1,
   sansPeage: r.sans_peage === 1,
+  deletedAt: r.deleted_at ?? undefined,
+  deletedBy: r.deleted_by ?? undefined,
 })
 const rowToAdresse = (r: AdresseRow): Adresse => ({
   id: r.id, label: r.label, ville: r.ville, lat: r.lat, lng: r.lng,
 })
 
 export async function getState(db: D1Database) {
+  // Les livreurs supprimés restent ici (marqués) : une tournée ancienne doit pouvoir
+  // afficher le nom d'un livreur qui n'est plus actif. Seules les tournées supprimées
+  // sortent de l'état courant ; elles vivent désormais dans la corbeille.
   const [liv, tou, adr] = await Promise.all([
     db.prepare('SELECT * FROM livreurs ORDER BY created_at').all<LivreurRow>(),
-    db.prepare('SELECT * FROM tournees ORDER BY date DESC').all<TourneeRow>(),
+    db.prepare('SELECT * FROM tournees WHERE deleted_at IS NULL ORDER BY date DESC').all<TourneeRow>(),
     db.prepare('SELECT * FROM adresses').all<AdresseRow>(),
   ])
   return {
@@ -90,9 +105,18 @@ export async function updateLivreur(
   await db.prepare(`UPDATE livreurs SET ${sets.join(', ')} WHERE id = ?`).bind(...vals).run()
 }
 
-export async function deleteLivreur(db: D1Database, id: string): Promise<void> {
-  await db.prepare('DELETE FROM tournees WHERE livreur_id = ?').bind(id).run()
-  await db.prepare('DELETE FROM livreurs WHERE id = ?').bind(id).run()
+// Marque le livreur seul : ses tournées sont de l'historique de livraison et doivent
+// survivre à son départ. L'ancienne cascade (DELETE FROM tournees WHERE livreur_id = ?)
+// a disparu : elle effaçait des rounds entiers, ce qui viole « zéro perte de données ».
+export async function deleteLivreur(db: D1Database, id: string, par?: string): Promise<void> {
+  await db
+    .prepare('UPDATE livreurs SET deleted_at = ?, deleted_by = ? WHERE id = ?')
+    .bind(Date.now(), par ?? null, id)
+    .run()
+}
+
+export async function restoreLivreur(db: D1Database, id: string): Promise<void> {
+  await db.prepare('UPDATE livreurs SET deleted_at = NULL, deleted_by = NULL WHERE id = ?').bind(id).run()
 }
 
 export async function createTournee(
@@ -134,8 +158,18 @@ export async function updateTournee(
   await db.prepare(`UPDATE tournees SET ${sets.join(', ')} WHERE id = ?`).bind(...vals).run()
 }
 
-export async function deleteTournee(db: D1Database, id: string): Promise<void> {
-  await db.prepare('DELETE FROM tournees WHERE id = ?').bind(id).run()
+export async function deleteTournee(db: D1Database, id: string, par?: string): Promise<void> {
+  await db
+    .prepare('UPDATE tournees SET deleted_at = ?, deleted_by = ?, updated_at = ? WHERE id = ?')
+    .bind(Date.now(), par ?? null, Date.now(), id)
+    .run()
+}
+
+export async function restoreTournee(db: D1Database, id: string): Promise<void> {
+  await db
+    .prepare('UPDATE tournees SET deleted_at = NULL, deleted_by = NULL, updated_at = ? WHERE id = ?')
+    .bind(Date.now(), id)
+    .run()
 }
 
 export async function upsertAdresse(db: D1Database, a: Adresse): Promise<void> {
@@ -147,4 +181,13 @@ export async function upsertAdresse(db: D1Database, a: Adresse): Promise<void> {
 
 export async function deleteAdresse(db: D1Database, id: string): Promise<void> {
   await db.prepare('DELETE FROM adresses WHERE id = ?').bind(id).run()
+}
+
+/** Le contenu de la corbeille : tournées et livreurs marqués supprimés, les plus récents d'abord. */
+export async function getCorbeille(db: D1Database): Promise<{ tournees: Tournee[]; livreurs: Livreur[] }> {
+  const [tou, liv] = await Promise.all([
+    db.prepare('SELECT * FROM tournees WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC').all<TourneeRow>(),
+    db.prepare('SELECT * FROM livreurs WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC').all<LivreurRow>(),
+  ])
+  return { tournees: tou.results.map(rowToTournee), livreurs: liv.results.map(rowToLivreur) }
 }

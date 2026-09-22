@@ -4,6 +4,7 @@ import {
   getState, createLivreur, updateLivreur, deleteLivreur,
   createTournee, updateTournee, deleteTournee,
   upsertAdresse, deleteAdresse,
+  restoreTournee, restoreLivreur, getCorbeille,
 } from './_db'
 
 describe('_db — livreurs', () => {
@@ -17,16 +18,19 @@ describe('_db — livreurs', () => {
     expect(state.livreurs.map((l) => l.nom)).toEqual(['Benali', 'Martin'])
   })
 
-  it('met à jour puis supprime (cascade tournées)', async () => {
+  it('met à jour puis supprime (le livreur ne cascade plus sur ses tournées)', async () => {
     const db = makeTestDb()
     const l = await createLivreur(db, { nom: 'B', prenom: 'K' })
     await updateLivreur(db, l.id, { telephone: '0700' })
-    await createTournee(db, { livreurId: l.id, date: '2026-06-18' })
+    const t = await createTournee(db, { livreurId: l.id, date: '2026-06-18' })
     expect((await getState(db)).tournees).toHaveLength(1)
     await deleteLivreur(db, l.id)
     const state = await getState(db)
-    expect(state.livreurs).toEqual([])
-    expect(state.tournees).toEqual([]) // cascade
+    // Le livreur reste renvoyé (marqué) : son nom doit rester résoluble sur ses tournées passées.
+    expect(state.livreurs.map((x) => x.id)).toEqual([l.id])
+    expect(state.livreurs[0].deletedAt).toBeGreaterThan(0)
+    // Ses tournées sont de l'historique de livraison : elles survivent à son départ.
+    expect(state.tournees.map((x) => x.id)).toEqual([t.id])
   })
 })
 
@@ -105,5 +109,60 @@ describe('_db — option péage', () => {
     await updateTournee(db, t.id, { sansPeage: false })
     await updateTournee(db, t.id, { date: '2026-08-20' })
     expect((await getState(db)).tournees[0].sansPeage).toBe(false)
+  })
+})
+
+describe('_db — corbeille', () => {
+  it('supprimer une tournée la masque sans l’effacer', async () => {
+    const db = makeTestDb()
+    const l = await createLivreur(db, { nom: 'B', prenom: 'K' })
+    const t = await createTournee(db, { livreurId: l.id, date: '2026-09-22' })
+
+    await deleteTournee(db, t.id, 'Thomas')
+
+    expect((await getState(db)).tournees).toHaveLength(0)
+    const corbeille = await getCorbeille(db)
+    expect(corbeille.tournees.map((x) => x.id)).toEqual([t.id])
+  })
+
+  it('restaurer une tournée la fait revenir dans l’état', async () => {
+    const db = makeTestDb()
+    const l = await createLivreur(db, { nom: 'B', prenom: 'K' })
+    const t = await createTournee(db, { livreurId: l.id, date: '2026-09-22' })
+    await deleteTournee(db, t.id, 'Thomas')
+
+    await restoreTournee(db, t.id)
+
+    expect((await getState(db)).tournees.map((x) => x.id)).toEqual([t.id])
+    expect((await getCorbeille(db)).tournees).toHaveLength(0)
+  })
+
+  it('supprimer un livreur NE supprime PLUS ses tournées', async () => {
+    const db = makeTestDb()
+    const l = await createLivreur(db, { nom: 'B', prenom: 'K' })
+    const t = await createTournee(db, { livreurId: l.id, date: '2026-09-22' })
+
+    await deleteLivreur(db, l.id, 'Thomas')
+
+    const state = await getState(db)
+    expect(state.tournees.map((x) => x.id)).toEqual([t.id])
+  })
+
+  it('un livreur supprimé reste renvoyé, marqué, pour que son nom reste affichable', async () => {
+    const db = makeTestDb()
+    const l = await createLivreur(db, { nom: 'B', prenom: 'K' })
+    await deleteLivreur(db, l.id, 'Thomas')
+
+    const vu = (await getState(db)).livreurs.find((x) => x.id === l.id)
+    expect(vu).toBeDefined()
+    expect(vu!.deletedAt).toBeGreaterThan(0)
+  })
+
+  it('la corbeille retient qui a supprimé', async () => {
+    const db = makeTestDb()
+    const l = await createLivreur(db, { nom: 'B', prenom: 'K' })
+    const t = await createTournee(db, { livreurId: l.id, date: '2026-09-22' })
+    await deleteTournee(db, t.id, 'Alexis')
+    expect((await getCorbeille(db)).tournees[0].deletedBy).toBe('Alexis')
   })
 })
