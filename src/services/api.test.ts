@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import { api } from './api'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { api, ConflitError } from './api'
+import { setOperateur } from '../state/operateur'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -27,5 +28,36 @@ describe('api client', () => {
   it('lève une erreur si la réponse n’est pas ok', async () => {
     mockFetch({ error: 'boom' }, false, 400)
     await expect(api.createTournee({ livreurId: 'l1', date: '2026-06-18' })).rejects.toThrow('boom')
+  })
+})
+
+describe('api — travail à deux', () => {
+  beforeEach(() => localStorage.clear())
+
+  it('joint le nom de l’opérateur à chaque écriture', async () => {
+    setOperateur('Thomas')
+    const fn = mockFetch({ ok: true, version: 2 })
+    await api.updateTournee('t1', { date: '2026-09-23' })
+    const init = fn.mock.calls[0][1] as { headers: Record<string, string> }
+    expect(init.headers['X-Operateur']).toBe('Thomas')
+  })
+
+  it('n’envoie pas d’en-tête X-Operateur tant qu’aucun nom n’est mémorisé', async () => {
+    const fn = mockFetch({ ok: true, version: 2 })
+    await api.updateTournee('t1', { date: '2026-09-23' })
+    const init = fn.mock.calls[0][1] as { headers: Record<string, string> }
+    expect('X-Operateur' in init.headers).toBe(false)
+  })
+
+  it('traduit un 409 en conflit exploitable', async () => {
+    mockFetch({ error: 'modifiée ailleurs' }, false, 409)
+    await expect(api.updateTournee('t1', { date: 'x' })).rejects.toBeInstanceOf(ConflitError)
+  })
+
+  it('traduit un 410 en disparition', async () => {
+    mockFetch({ error: 'supprimée' }, false, 410)
+    await api.updateTournee('t1', { date: 'x' }).catch((e: ConflitError) => {
+      expect(e.type).toBe('absente')
+    })
   })
 })

@@ -1,4 +1,5 @@
 import type { Livreur, Stop, RouteResult, Suggestion, Tournee } from '../types'
+import { getOperateur } from '../state/operateur'
 
 export interface AppState {
   livreurs: Livreur[]
@@ -6,15 +7,33 @@ export interface AppState {
   adresses: Suggestion[]
 }
 
+/** Écriture refusée par le serveur : version périmée (409) ou tournée disparue (410). */
+export class ConflitError extends Error {
+  type: 'conflit' | 'absente'
+  constructor(type: 'conflit' | 'absente', message: string) {
+    super(message)
+    this.name = 'ConflitError'
+    this.type = type
+  }
+}
+
 async function req<T>(url: string, method: string, body?: unknown): Promise<T> {
+  const headers: Record<string, string> = {}
+  if (body !== undefined) headers['content-type'] = 'application/json'
+  const op = getOperateur()
+  if (op) headers['X-Operateur'] = op
+
   const res = await fetch(url, {
     method,
-    headers: body !== undefined ? { 'content-type': 'application/json' } : undefined,
+    headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
   })
   if (!res.ok) {
     const detail = await res.json().catch(() => null)
-    throw new Error((detail as { error?: string } | null)?.error ?? `Erreur ${res.status}`)
+    const msg = (detail as { error?: string } | null)?.error ?? `Erreur ${res.status}`
+    if (res.status === 409) throw new ConflitError('conflit', msg)
+    if (res.status === 410) throw new ConflitError('absente', msg)
+    throw new Error(msg)
   }
   return (await res.json()) as T
 }
@@ -42,4 +61,9 @@ export const api = {
 
   upsertAdresse: (a: Suggestion) => req<{ ok: true }>('/api/adresses', 'POST', a),
   deleteAdresse: (id: string) => req<{ ok: true }>(`/api/adresses/${id}`, 'DELETE'),
+
+  getSync: () => req<{ stamp: number; livreurs: number }>('/api/sync', 'GET'),
+  getCorbeille: () => req<{ tournees: Tournee[]; livreurs: Livreur[] }>('/api/corbeille', 'GET'),
+  restore: (id: string, type: 'tournee' | 'livreur') =>
+    req<{ ok: true }>(`/api/corbeille/${id}`, 'POST', { type }),
 }
