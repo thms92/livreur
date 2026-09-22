@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import type { D1Database } from '@cloudflare/workers-types'
 import { makeTestDb } from '../../src/test/d1'
 import {
   getState, createLivreur, updateLivreur, deleteLivreur,
@@ -180,16 +181,56 @@ describe('_db — verrou optimiste', () => {
     expect((await getState(db)).tournees[0].date).toBe('2026-09-23')
   })
 
+  it('la version renvoyée après une écriture gardée est déduite du patch, pas relue en base', async () => {
+    const db = makeTestDb()
+    const l = await createLivreur(db, { nom: 'B', prenom: 'K' })
+    const t = await createTournee(db, { livreurId: l.id, date: '2026-09-22' })
+
+    // On piège toutes les requêtes passées par updateTournee. Si le chemin gardé relit
+    // encore la version après l'UPDATE (ancienne implémentation), on la retrouve ici.
+    // Cette relecture est le trou : entre l'UPDATE de A et sa relecture, un tiers B peut
+    // écrire à son tour ; A se verrait alors répondre la version de B sans avoir jamais vu
+    // ses données, et sa prochaine écriture écraserait B en toute impunité — perte
+    // silencieuse, exactement ce que ce verrou existe pour empêcher. Le correctif déduit
+    // la nouvelle version du patch (version = version + 1 n'a pu matcher que sur
+    // patch.version), donc plus aucune relecture n'a lieu sur ce chemin.
+    const requetes: string[] = []
+    const dbEspionne = {
+      prepare(query: string) {
+        requetes.push(query)
+        return db.prepare(query)
+      },
+    } as unknown as D1Database
+
+    const r = await updateTournee(dbEspionne, t.id, { date: '2026-09-23', version: 1 })
+
+    expect(r).toEqual({ ok: true, version: 2 })
+    expect(requetes.some((q) => q.trim().startsWith('SELECT version FROM tournees'))).toBe(false)
+  })
+
   it('une écriture en version périmée est refusée ET ne modifie rien', async () => {
     const db = makeTestDb()
     const l = await createLivreur(db, { nom: 'B', prenom: 'K' })
     const t = await createTournee(db, { livreurId: l.id, date: '2026-09-22' })
-    await updateTournee(db, t.id, { date: '2026-09-23', version: 1 })
+    await updateTournee(db, t.id, { date: '2026-09-23', version: 1, par: 'Alexis' })
+    const avant = await db
+      .prepare('SELECT date, version, updated_at, updated_by FROM tournees WHERE id = ?')
+      .bind(t.id)
+      .first()
 
-    const r = await updateTournee(db, t.id, { date: '2999-01-01', version: 1 })
+    const r = await updateTournee(db, t.id, { date: '2999-01-01', version: 1, par: 'Thomas' })
 
     expect(r).toEqual({ ok: false, raison: 'conflit' })
     expect((await getState(db)).tournees[0].date).toBe('2026-09-23')
+    // getState() ne renvoie pas version/updated_at/updated_by : une écriture refusée qui
+    // les modifierait quand même (refus partiellement appliqué, interdit par la spec)
+    // passerait inaperçue si on ne comparait que `date`. On relit la ligne brute pour
+    // prouver qu'absolument rien n'a bougé, pas seulement le champ le plus visible.
+    const apres = await db
+      .prepare('SELECT date, version, updated_at, updated_by FROM tournees WHERE id = ?')
+      .bind(t.id)
+      .first()
+    expect(apres).toEqual(avant)
   })
 
   it('une écriture sur une tournée supprimée signale qu’elle a disparu', async () => {

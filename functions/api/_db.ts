@@ -177,6 +177,14 @@ export async function updateTournee(
     .run()
 
   if (res.meta.changes === 1) {
+    // Chemin gardé : l'UPDATE n'a matché que parce que version = patch.version, donc
+    // `version = version + 1` a nécessairement produit patch.version + 1. On le renvoie
+    // directement plutôt que de relire la ligne : entre notre UPDATE et une relecture
+    // séparée, un tiers peut écrire à son tour et nous ferait renvoyer SA version — le
+    // client croirait alors avoir vu ses données alors qu'il ne les a jamais lues, et sa
+    // prochaine écriture passerait la garde en écrasant ce tiers (perte silencieuse,
+    // exactement ce que ce verrou existe pour empêcher).
+    if (patch.version !== undefined) return { ok: true, version: patch.version + 1 }
     const row = await db.prepare('SELECT version FROM tournees WHERE id = ?').bind(id).first<{ version: number }>()
     return { ok: true, version: row?.version ?? 0 }
   }
