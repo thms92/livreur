@@ -89,6 +89,11 @@ button { font-family: inherit; cursor: pointer; }
 .peage-sans { background: var(--peage-sans-bg); color: var(--peage-sans-fg); }
 .peage-avec { background: var(--peage-avec-bg); color: var(--peage-avec-fg); }
 
+/* Thème sombre : OSM France ne publie pas de variante sombre, on assombrit les tuiles.
+   Le filtre ne porte que sur le calque de tuiles — le tracé et les pastilles,
+   qui vivent dans les calques d'overlay, gardent leurs couleurs réelles. */
+.map-dark .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.92); }
+
 .tournee-editor { display: grid; grid-template-columns: minmax(360px, 1fr) 1fr; gap: 20px; height: calc(100vh - 48px); }
 .editor-form { display: flex; flex-direction: column; gap: 14px; overflow: auto; }
 .editor-head { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }

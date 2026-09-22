@@ -4,12 +4,9 @@ import L from 'leaflet'
 import { useLivreur } from '../../state/LivreurContext'
 import { DEPOT } from '../../data/depot'
 import type { LatLng } from '../../types'
+import { TILE_ATTR, TILE_MAX_ZOOM, TILE_URL } from '../../data/tiles'
 
-const TILES = {
-  light: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-  dark: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-}
-const ATTR = '&copy; OpenStreetMap, &copy; CARTO'
+
 
 function FitBounds({ points }: { points: LatLng[] }) {
   const map = useMap()
@@ -50,10 +47,11 @@ export function BaseMap({ points, interactive = true, children }: Props) {
       dragging={interactive}
       doubleClickZoom={interactive}
       attributionControl={false}
+      className={theme === 'dark' ? 'map-dark' : undefined}
       style={{ width: '100%', height: '100%' }}
     >
       <AttributionControl position="bottomright" prefix={false} />
-      <TileLayer key={theme} url={theme === 'dark' ? TILES.dark : TILES.light} attribution={ATTR} />
+      <TileLayer url={TILE_URL} attribution={TILE_ATTR} maxZoom={TILE_MAX_ZOOM} />
       <FitBounds points={points} />
       <Resizer />
       {children}

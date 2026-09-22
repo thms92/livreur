@@ -1,11 +1,12 @@
 import type { Tournee } from '../types'
 import type { LivreurWithColor } from '../state/LivreurContext'
 import { DEPOT } from '../data/depot'
+import { TILE_URL, TILE_MAX_ZOOM } from '../data/tiles'
 import { formatDuree } from '../lib/tourneeTime'
 
 const LEAFLET_CSS = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'
 const LEAFLET_JS = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'
-const TILES = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
+
 
 function esc(s: string): string {
   return s
@@ -53,7 +54,7 @@ window.addEventListener('load', function () {
   try {
     var map = L.map('map', { zoomControl: false, attributionControl: true });
     window.__map = map;
-    var tiles = L.tileLayer('${TILES}', { maxZoom: 19 });
+    var tiles = L.tileLayer('${TILE_URL}', { maxZoom: ${TILE_MAX_ZOOM} });
     tiles.on('load', go);
     tiles.addTo(map);
     var pts = [depot];

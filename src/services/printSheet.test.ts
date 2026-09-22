@@ -79,4 +79,11 @@ describe('buildSheetHtml', () => {
     const html = buildSheetHtml({ ...tournee, sansPeage: false }, livreur)
     expect(html).toContain('Péages autorisés')
   })
+
+  it('la carte imprimée utilise le fond sans clé d’API', () => {
+    const html = buildSheetHtml(tournee, livreur)
+    expect(html).toContain('tile.openstreetmap.fr/osmfr')
+    expect(html).not.toContain('cartocdn')
+    expect(html).not.toContain('{r}')
+  })
 })

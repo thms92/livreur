@@ -77,7 +77,11 @@ npx tsc -p functions/tsconfig.json   # type-check des Pages Functions
 - `src/components/` — `layout/` (Sidebar), `Livreurs/`, `Tournees/`, `Chauffeurs/`,
   `AddressAutocomplete`, `map/`, `icons/`.
 
-La carte est une **carte Leaflet** (tuiles **CARTO** Positron/dark_matter selon le thème), isolée
+La carte est une **carte Leaflet** (tuiles **OSM France**, `data/tiles.ts` — source unique partagée
+avec la feuille imprimée ; en thème sombre les tuiles sont assombries par filtre CSS, OSM France ne
+publiant pas de variante sombre). CARTO a été abandonné : ses tuiles exigent désormais une clé d'API
+et renvoyaient un filigrane « API KEY REQUIRED ». Attention, pas de tuiles `@2x` : le placeholder
+`{r}` de Leaflet y renvoie 404. La carte est isolée
 dans `components/map/` (`BaseMap`, `TourneeMap`, `pins`). Le tracé affiché vient de la géométrie
 routière Valhalla.
 
