@@ -11,8 +11,12 @@ vi.mock('../services/routing', () => ({
   computeRoute: vi.fn(async () => ({ km: 5, min: 8, geometry: [], optimized: false, approximate: false })),
 }))
 
-vi.mock('../services/api', () => {
+// On ne simule que le transport : `ConflitError` reste la vraie classe, sinon
+// l'`instanceof` du contexte ne reconnaitrait pas les refus du serveur.
+vi.mock('../services/api', async () => {
+  const actual = await vi.importActual<typeof import('../services/api')>('../services/api')
   return {
+    ConflitError: actual.ConflitError,
     api: {
       getState: vi.fn(async () => ({ livreurs: [], tournees: [], adresses: [] })),
       createLivreur: vi.fn(async (i: { nom: string; prenom: string; telephone: string }) => ({
@@ -21,17 +25,20 @@ vi.mock('../services/api', () => {
       updateLivreur: vi.fn(async () => ({ ok: true })),
       deleteLivreur: vi.fn(async () => ({ ok: true })),
       createTournee: vi.fn(async (i: { livreurId: string; date: string }) => ({
-        id: 'T' + Math.random().toString(36).slice(2, 6), ...i, stops: [],
+        id: 'T' + Math.random().toString(36).slice(2, 6), ...i, stops: [], version: 1,
       })),
-      updateTournee: vi.fn(async () => ({ ok: true })),
+      updateTournee: vi.fn(async () => ({ ok: true, version: 2 })),
       deleteTournee: vi.fn(async () => ({ ok: true })),
       upsertAdresse: vi.fn(async () => ({ ok: true })),
       deleteAdresse: vi.fn(async () => ({ ok: true })),
+      getSync: vi.fn(async () => ({ stamp: 1, livreurs: 0 })),
+      getCorbeille: vi.fn(async () => ({ tournees: [], livreurs: [] })),
+      restore: vi.fn(async () => ({ ok: true })),
     },
   }
 })
 
-import { api } from '../services/api'
+import { api, ConflitError } from '../services/api'
 import { computeRoute, optimizeTrip } from '../services/routing'
 
 const wrapper = ({ children }: { children: ReactNode }) => <LivreurProvider>{children}</LivreurProvider>
@@ -163,5 +170,94 @@ describe('LivreurContext (API)', () => {
     await act(async () => { await result.current.optimizeTournee(tid) })
 
     expect(optimizeTrip).toHaveBeenCalledWith(expect.anything(), { sansPeage: false })
+  })
+})
+
+describe('LivreurContext — travail à deux', () => {
+  /** Un livreur et une tournée fraîchement créés (la tournée porte la version 1). */
+  async function tourneeNeuve() {
+    const hook = await ready()
+    const { result } = hook
+    await act(async () => { await result.current.addLivreur({ nom: 'B', prenom: 'K', telephone: '' }) })
+    let tid = ''
+    await act(async () => {
+      tid = await result.current.addTournee({ livreurId: result.current.livreurs[0].id, date: '2026-09-22' })
+    })
+    return { result, tid, livreurId: result.current.livreurs[0].id }
+  }
+
+  it('relit l’état quand l’onglet redevient visible et que le serveur a bougé', async () => {
+    const { result } = await ready()
+    // Le serveur bouge après l’amorçage du marqueur : c’est ce saut qui doit déclencher la relecture.
+    vi.mocked(api.getSync).mockResolvedValueOnce({ stamp: 999, livreurs: 0 })
+    vi.mocked(api.getState).mockClear()
+
+    document.dispatchEvent(new Event('visibilitychange'))
+
+    await waitFor(() => expect(api.getState).toHaveBeenCalled())
+    expect(result.current.error).toBeNull()
+  })
+
+  it('ne relit pas si le serveur n’a pas bougé', async () => {
+    await ready()
+    // Le marqueur est amorcé dès le chargement : le premier sondage ne doit rien rapatrier.
+    expect(api.getSync).toHaveBeenCalled()
+    vi.mocked(api.getState).mockClear()
+
+    document.dispatchEvent(new Event('visibilitychange'))
+    await new Promise((r) => setTimeout(r, 20))
+
+    expect(api.getState).not.toHaveBeenCalled()
+  })
+
+  it('un conflit annule la modification locale, prévient et recharge', async () => {
+    const { result, tid, livreurId } = await tourneeNeuve()
+    vi.mocked(api.updateTournee).mockRejectedValueOnce(new ConflitError('conflit', 'modifiée ailleurs'))
+    // Le rechargement ramène la vérité du serveur : la date refusée n’y figure pas.
+    vi.mocked(api.getState).mockResolvedValueOnce({
+      livreurs: [],
+      tournees: [{ id: tid, livreurId, date: '2026-09-22', stops: [], version: 4 }],
+      adresses: [],
+    })
+    const appelsAvant = vi.mocked(api.getState).mock.calls.length
+
+    await act(async () => { await result.current.updateTournee(tid, { date: '2026-09-23' }) })
+
+    expect(result.current.error).toMatch(/modifiée ailleurs/i)
+    // Le message est celui destiné à l’utilisateur, pas le brut du serveur.
+    expect(result.current.error).toMatch(/rechargé/i)
+    // Pas de compte absolu : on exige un appel *supplémentaire* après le conflit.
+    await waitFor(() => expect(vi.mocked(api.getState).mock.calls.length).toBeGreaterThan(appelsAvant))
+    await waitFor(() => expect(result.current.tournees[0]?.date).toBe('2026-09-22'))
+  })
+
+  it('une écriture de tournée porte la version détenue (le verrou est armé)', async () => {
+    const { result, tid } = await tourneeNeuve()
+
+    await act(async () => { await result.current.updateTournee(tid, { date: '2026-09-23' }) })
+
+    expect(vi.mocked(api.updateTournee).mock.calls.at(-1)?.[1]).toMatchObject({ version: 1 })
+  })
+
+  it('la version renvoyée par le serveur remplace celle de l’état', async () => {
+    const { result, tid } = await tourneeNeuve()
+    vi.mocked(api.updateTournee).mockResolvedValueOnce({ ok: true, version: 7 })
+
+    await act(async () => { await result.current.updateTournee(tid, { date: '2026-09-23' }) })
+    expect(result.current.tournees[0].version).toBe(7)
+
+    // L’écriture suivante repart de la version rendue, sinon elle se heurterait au verrou.
+    await act(async () => { await result.current.setTourneeHeure(tid, { departHeure: '08:00' }) })
+    expect(vi.mocked(api.updateTournee).mock.calls.at(-1)?.[1]).toMatchObject({ version: 7 })
+  })
+
+  it('restaurer remet l’élément puis relit l’état', async () => {
+    const { result } = await ready()
+    const appelsAvant = vi.mocked(api.getState).mock.calls.length
+
+    await act(async () => { await result.current.restaurer('T1', 'tournee') })
+
+    expect(api.restore).toHaveBeenCalledWith('T1', 'tournee')
+    expect(vi.mocked(api.getState).mock.calls.length).toBeGreaterThan(appelsAvant)
   })
 })

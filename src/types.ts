@@ -42,6 +42,11 @@ export interface Tournee {
   retourHeure?: string // heure de retour au dépôt, "HH:MM" (24h), saisie manuelle
   ordreManuel?: boolean // true = ordre figé manuellement ; sinon tri chronologique auto
   sansPeage?: boolean // true = itinéraire évitant les péages (défaut des nouvelles tournées)
+  // Version détenue localement : renvoyée par le serveur à chaque lecture et à chaque
+  // écriture acceptée, elle est réémise à l'écriture suivante pour armer le verrou
+  // optimiste. Optionnelle : une tournée construite hors serveur (tests) n'en a pas,
+  // et l'écriture passe alors sans contrôle, comme avant.
+  version?: number
 }
 
 export interface Suggestion {

@@ -55,8 +55,11 @@ export const api = {
       livreurId?: string; date?: string; stops?: Stop[]; route?: RouteResult | null
       departHeure?: string; retourHeure?: string; ordreManuel?: boolean
       sansPeage?: boolean
+      version?: number // version détenue par le client : arme le verrou optimiste côté serveur
     },
-  ) => req<{ ok: true }>(`/api/tournees/${id}`, 'PUT', patch),
+    // Le serveur renvoie la version qu'il vient d'écrire : l'appelant doit la ranger,
+    // sinon son écriture suivante repartirait d'une version périmée.
+  ) => req<{ ok: true; version: number }>(`/api/tournees/${id}`, 'PUT', patch),
   deleteTournee: (id: string) => req<{ ok: true }>(`/api/tournees/${id}`, 'DELETE'),
 
   upsertAdresse: (a: Suggestion) => req<{ ok: true }>('/api/adresses', 'POST', a),

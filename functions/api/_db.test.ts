@@ -300,4 +300,22 @@ describe('_db — attribution et synchro', () => {
     expect(apres.stamp).toBeGreaterThanOrEqual(avant.stamp)
     expect(apres.livreurs).toBe(1)
   })
+
+  it('le résumé de synchro bouge quand un livreur est supprimé puis restauré', async () => {
+    const db = makeTestDb()
+    const a = await createLivreur(db, { nom: 'B', prenom: 'K' })
+    await createLivreur(db, { nom: 'M', prenom: 'L' })
+    const avant = await getSync(db)
+    expect(avant.livreurs).toBe(2)
+
+    // La suppression est un marquage : la ligne survit et aucune tournée ne bouge, donc
+    // seul le compte des livreurs vivants peut signaler le changement à l'autre poste.
+    await deleteLivreur(db, a.id, 'Thomas')
+    const apres = await getSync(db)
+    expect(apres.livreurs).toBe(1)
+    expect(apres.stamp).toBe(avant.stamp)
+
+    await restoreLivreur(db, a.id)
+    expect((await getSync(db)).livreurs).toBe(2)
+  })
 })

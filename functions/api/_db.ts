@@ -247,10 +247,16 @@ export async function getCorbeille(db: D1Database): Promise<{ tournees: Tournee[
 // `livreurs` (leur simple compte) a changé depuis le dernier sondage. `livreurs` existe
 // pour attraper l'ajout d'un nouveau livreur, qui ne touche aucune tournée et donc ne
 // ferait pas bouger `stamp`.
+//
+// Ce compte ne retient que les livreurs vivants : depuis que la suppression est un
+// marquage, la ligne survit, un COUNT(*) brut ne bougerait plus, et ni la suppression ni
+// la restauration d'un livreur (qui ne touchent aucune tournée, donc pas `stamp` non plus)
+// ne seraient jamais visibles depuis l'autre poste. Un simple renommage reste indétectable :
+// c'est assumé, il ne fait perdre aucune donnée.
 export async function getSync(db: D1Database): Promise<{ stamp: number; livreurs: number }> {
   const [t, l] = await Promise.all([
     db.prepare('SELECT MAX(updated_at) AS stamp FROM tournees').first<{ stamp: number | null }>(),
-    db.prepare('SELECT COUNT(*) AS n FROM livreurs').first<{ n: number }>(),
+    db.prepare('SELECT COUNT(*) AS n FROM livreurs WHERE deleted_at IS NULL').first<{ n: number }>(),
   ])
   return { stamp: t?.stamp ?? 0, livreurs: l?.n ?? 0 }
 }
