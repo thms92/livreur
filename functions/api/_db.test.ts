@@ -166,3 +166,48 @@ describe('_db — corbeille', () => {
     expect((await getCorbeille(db)).tournees[0].deletedBy).toBe('Alexis')
   })
 })
+
+describe('_db — verrou optimiste', () => {
+  it('une écriture à jour passe et incrémente la version', async () => {
+    const db = makeTestDb()
+    const l = await createLivreur(db, { nom: 'B', prenom: 'K' })
+    const t = await createTournee(db, { livreurId: l.id, date: '2026-09-22' })
+    expect(t.version).toBe(1)
+
+    const r = await updateTournee(db, t.id, { date: '2026-09-23', version: 1 })
+
+    expect(r).toEqual({ ok: true, version: 2 })
+    expect((await getState(db)).tournees[0].date).toBe('2026-09-23')
+  })
+
+  it('une écriture en version périmée est refusée ET ne modifie rien', async () => {
+    const db = makeTestDb()
+    const l = await createLivreur(db, { nom: 'B', prenom: 'K' })
+    const t = await createTournee(db, { livreurId: l.id, date: '2026-09-22' })
+    await updateTournee(db, t.id, { date: '2026-09-23', version: 1 })
+
+    const r = await updateTournee(db, t.id, { date: '2999-01-01', version: 1 })
+
+    expect(r).toEqual({ ok: false, raison: 'conflit' })
+    expect((await getState(db)).tournees[0].date).toBe('2026-09-23')
+  })
+
+  it('une écriture sur une tournée supprimée signale qu’elle a disparu', async () => {
+    const db = makeTestDb()
+    const l = await createLivreur(db, { nom: 'B', prenom: 'K' })
+    const t = await createTournee(db, { livreurId: l.id, date: '2026-09-22' })
+    await deleteTournee(db, t.id, 'Thomas')
+
+    const r = await updateTournee(db, t.id, { date: '2999-01-01', version: 1 })
+
+    expect(r).toEqual({ ok: false, raison: 'absente' })
+  })
+
+  it('sans version fournie, l’écriture passe sans contrôle (compatibilité)', async () => {
+    const db = makeTestDb()
+    const l = await createLivreur(db, { nom: 'B', prenom: 'K' })
+    const t = await createTournee(db, { livreurId: l.id, date: '2026-09-22' })
+    const r = await updateTournee(db, t.id, { date: '2026-09-24' })
+    expect(r.ok).toBe(true)
+  })
+})

@@ -1,17 +1,17 @@
 import type { D1Database } from '@cloudflare/workers-types'
-import { deleteTournee, updateTournee, type RouteResult, type Stop } from '../_db'
-import { json } from '../_http'
+import { deleteTournee, updateTournee } from '../_db'
+import { conflict, gone, json } from '../_http'
 
 type Ctx = { env: { DB: D1Database }; request: Request; params: { id: string } }
 
 export const onRequestPut = async (c: Ctx): Promise<Response> => {
-  const patch = (await c.request.json().catch(() => ({}))) as {
-    livreurId?: string; date?: string; stops?: Stop[]; route?: RouteResult | null
-    departHeure?: string; retourHeure?: string; ordreManuel?: boolean
-    sansPeage?: boolean
-  }
-  await updateTournee(c.env.DB, c.params.id, patch)
-  return json({ ok: true })
+  const patch = (await c.request.json().catch(() => ({}))) as Record<string, unknown>
+  const par = c.request.headers.get('X-Operateur') ?? undefined
+  const r = await updateTournee(c.env.DB, c.params.id, { ...patch, par })
+  if (r.ok) return json({ ok: true, version: r.version })
+  return r.raison === 'conflit'
+    ? conflict('Cette tournée a été modifiée ailleurs.')
+    : gone('Cette tournée a été supprimée.')
 }
 
 export const onRequestDelete = async (c: Ctx): Promise<Response> => {

@@ -12,6 +12,7 @@ export interface Tournee {
   id: string; livreurId: string; date: string; stops: Stop[]; route?: RouteResult
   departHeure?: string; retourHeure?: string; ordreManuel?: boolean
   sansPeage?: boolean // true = itinéraire évitant les péages (défaut des nouvelles tournées)
+  version: number
   deletedAt?: number
   deletedBy?: string
 }
@@ -25,6 +26,7 @@ interface TourneeRow {
   id: string; livreur_id: string; date: string; stops_json: string; route_json: string | null; updated_at: number
   depart_heure: string | null; retour_heure: string | null; ordre_manuel: number
   sans_peage: number
+  version: number
   deleted_at: number | null; deleted_by: string | null
 }
 interface AdresseRow { id: string; label: string; ville: string; lat: number; lng: number }
@@ -45,6 +47,7 @@ const rowToTournee = (r: TourneeRow): Tournee => ({
   retourHeure: r.retour_heure ?? undefined,
   ordreManuel: r.ordre_manuel === 1,
   sansPeage: r.sans_peage === 1,
+  version: r.version,
   deletedAt: r.deleted_at ?? undefined,
   deletedBy: r.deleted_by ?? undefined,
 })
@@ -124,8 +127,9 @@ export async function createTournee(
   input: { livreurId: string; date: string },
 ): Promise<Tournee> {
   // sans_peage n'est pas dans l'INSERT : la colonne porte le défaut (1 = sans péage).
+  // version n'est pas dans l'INSERT non plus : la colonne porte le défaut (1).
   const tournee: Tournee = {
-    id: newId(), livreurId: input.livreurId, date: input.date, stops: [], sansPeage: true,
+    id: newId(), livreurId: input.livreurId, date: input.date, stops: [], sansPeage: true, version: 1,
   }
   await db
     .prepare('INSERT INTO tournees (id, livreur_id, date, stops_json, route_json, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
@@ -134,15 +138,19 @@ export async function createTournee(
   return tournee
 }
 
+export type ResultatEcriture =
+  | { ok: true; version: number }
+  | { ok: false; raison: 'conflit' | 'absente' }
+
 export async function updateTournee(
   db: D1Database,
   id: string,
   patch: {
     livreurId?: string; date?: string; stops?: Stop[]; route?: RouteResult | null
-    departHeure?: string; retourHeure?: string; ordreManuel?: boolean
-    sansPeage?: boolean
+    departHeure?: string; retourHeure?: string; ordreManuel?: boolean; sansPeage?: boolean
+    version?: number; par?: string
   },
-): Promise<void> {
+): Promise<ResultatEcriture> {
   const sets: string[] = []
   const vals: unknown[] = []
   if (patch.livreurId !== undefined) { sets.push('livreur_id = ?'); vals.push(patch.livreurId) }
@@ -153,9 +161,33 @@ export async function updateTournee(
   if (patch.retourHeure !== undefined) { sets.push('retour_heure = ?'); vals.push(patch.retourHeure || null) }
   if (patch.ordreManuel !== undefined) { sets.push('ordre_manuel = ?'); vals.push(patch.ordreManuel ? 1 : 0) }
   if (patch.sansPeage !== undefined) { sets.push('sans_peage = ?'); vals.push(patch.sansPeage ? 1 : 0) }
+  sets.push('updated_by = ?'); vals.push(patch.par ?? null)
   sets.push('updated_at = ?'); vals.push(Date.now())
+  sets.push('version = version + 1')
+
+  // Le verrou : on n'écrit que si la version lue par le client est toujours d'actualité,
+  // et jamais sur une tournée mise à la corbeille.
+  const garde = patch.version !== undefined ? ' AND version = ?' : ''
   vals.push(id)
-  await db.prepare(`UPDATE tournees SET ${sets.join(', ')} WHERE id = ?`).bind(...vals).run()
+  if (patch.version !== undefined) vals.push(patch.version)
+
+  const res = await db
+    .prepare(`UPDATE tournees SET ${sets.join(', ')} WHERE id = ? AND deleted_at IS NULL${garde}`)
+    .bind(...vals)
+    .run()
+
+  if (res.meta.changes === 1) {
+    const row = await db.prepare('SELECT version FROM tournees WHERE id = ?').bind(id).first<{ version: number }>()
+    return { ok: true, version: row?.version ?? 0 }
+  }
+  // 0 ligne touchée est ambigu : soit la version a bougé sous nos pieds (conflit,
+  // la ligne est toujours vivante), soit la tournée a été mise à la corbeille entre-temps
+  // (absente). On distingue les deux avec une lecture séparée, sans le filtre de version.
+  const vivante = await db
+    .prepare('SELECT 1 AS v FROM tournees WHERE id = ? AND deleted_at IS NULL')
+    .bind(id)
+    .first<{ v: number }>()
+  return { ok: false, raison: vivante ? 'conflit' : 'absente' }
 }
 
 export async function deleteTournee(db: D1Database, id: string, par?: string): Promise<void> {
