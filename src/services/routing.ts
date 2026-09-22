@@ -7,6 +7,11 @@ import { decodePolyline6 } from './polyline'
 const VALHALLA = 'https://valhalla1.openstreetmap.de'
 const AVG_KMH = 50 // vitesse moyenne pour estimer la durée en mode repli
 
+// L'instance publique refuse toute requête de plus de 10 points
+// (« Exceeded max locations: 10 »), sur /route comme sur /optimized_route.
+// Au-delà, la boucle est découpée en tronçons enchaînés.
+const MAX_LOCATIONS = 10
+
 /** Mode d'itinéraire. Sans péage par défaut. */
 export interface RouteOptions {
   sansPeage?: boolean
@@ -46,6 +51,20 @@ function joinLegs(legs: Leg[]): [number, number][] {
   })
 }
 
+/**
+ * Découpe une séquence ordonnée en tronçons d'au plus MAX_LOCATIONS points,
+ * chaque tronçon reprenant le dernier point du précédent. Le découpage est exact
+ * pour un itinéraire à ordre fixe : A→B→C→D vaut (A→B→C) puis (C→D).
+ */
+function chunkLocations(pts: LatLng[]): LatLng[][] {
+  if (pts.length <= MAX_LOCATIONS) return [pts]
+  const chunks: LatLng[][] = []
+  for (let start = 0; start < pts.length - 1; start += MAX_LOCATIONS - 1) {
+    chunks.push(pts.slice(start, start + MAX_LOCATIONS))
+  }
+  return chunks
+}
+
 async function askValhalla(path: string, pts: LatLng[], sansPeage: boolean): Promise<Trip> {
   const res = await fetch(`${VALHALLA}${path}`, {
     method: 'POST',
@@ -73,6 +92,13 @@ export async function optimizeTrip(
 ): Promise<{ order: number[]; route: RouteResult }> {
   if (stops.length === 0) return { order: [], route: emptyRoute(true) }
   const pts = [DEPOT, ...stops, DEPOT]
+  // L'optimisation d'ordre est globale : elle ne se découpe pas en tronçons.
+  // Au-delà de la limite de l'instance, on garde l'ordre donné et on se rabat sur
+  // un calcul d'itinéraire, lui découpable — mieux vaut un vrai tracé non réordonné
+  // qu'un repli à vol d'oiseau.
+  if (pts.length > MAX_LOCATIONS) {
+    return { order: stops.map((_, i) => i), route: await computeRoute(stops, opts) }
+  }
   try {
     const trip = await askValhalla('/optimized_route', pts, opts.sansPeage ?? true)
     if (!trip.locations) throw new Error('valhalla')
@@ -96,16 +122,20 @@ export async function optimizeTrip(
 /** Calcule km/min/tracé sur l'ordre DONNÉ (sans réoptimiser). Boucle dépôt -> arrêts -> dépôt. */
 export async function computeRoute(stops: Stop[], opts: RouteOptions = {}): Promise<RouteResult> {
   if (stops.length === 0) return emptyRoute(false)
-  const pts = [DEPOT, ...stops, DEPOT]
+  const sansPeage = opts.sansPeage ?? true
   try {
-    const trip = await askValhalla('/route', pts, opts.sansPeage ?? true)
-    return {
-      km: trip.summary.length,
-      min: trip.summary.time / 60,
-      geometry: joinLegs(trip.legs),
-      optimized: false,
-      approximate: false,
+    let km = 0
+    let min = 0
+    const geometry: [number, number][] = []
+    // Tronçons séquentiels : on reste poli avec une instance publique gratuite.
+    for (const chunk of chunkLocations([DEPOT, ...stops, DEPOT])) {
+      const trip = await askValhalla('/route', chunk, sansPeage)
+      km += trip.summary.length
+      min += trip.summary.time / 60
+      const pts = joinLegs(trip.legs)
+      geometry.push(...(geometry.length ? pts.slice(1) : pts))
     }
+    return { km, min, geometry, optimized: false, approximate: false }
   } catch {
     return fallbackRoute(stops)
   }

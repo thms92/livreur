@@ -68,6 +68,11 @@ npx tsc -p functions/tsconfig.json   # type-check des Pages Functions
     `optimizeTrip` (`/optimized_route`, ordre optimisé, dépôt fixe aux deux bouts) et `computeRoute`
     (`/route`, ordre donné). L'option péage passe par `costing_options.auto.use_tolls` (0 = éviter).
     **Repli haversine** hors-ligne si Valhalla est injoignable.
+    L'instance publique refuse plus de **10 points par requête** (« Exceeded max locations: 10 »),
+    soit 8 arrêts avec le dépôt aux deux bouts : au-delà, la boucle est découpée en tronçons
+    enchaînés puis recollée — exact, l'ordre étant fixe. L'optimisation d'ordre, elle, est globale
+    et ne se découpe pas : au-delà de 8 arrêts, `optimizeTrip` conserve l'ordre donné et se
+    contente de calculer le vrai tracé.
     OSRM a été abandonné : son instance publique refuse `exclude=toll`.
   - `polyline.ts` — décodage des tracés Valhalla (polyligne encodée, précision 6).
   - `geo.ts` — distances **haversine** (utilisé par le repli).
