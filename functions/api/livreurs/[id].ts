@@ -11,6 +11,7 @@ export const onRequestPut = async (c: Ctx): Promise<Response> => {
 }
 
 export const onRequestDelete = async (c: Ctx): Promise<Response> => {
-  await deleteLivreur(c.env.DB, c.params.id)
+  const par = c.request.headers.get('X-Operateur') ?? undefined
+  await deleteLivreur(c.env.DB, c.params.id, par)
   return json({ ok: true })
 }

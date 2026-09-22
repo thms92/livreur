@@ -15,6 +15,8 @@ export interface Tournee {
   version: number
   deletedAt?: number
   deletedBy?: string
+  createdBy?: string
+  updatedBy?: string
 }
 export interface Adresse { id: string; label: string; ville: string; lat: number; lng: number }
 
@@ -28,6 +30,7 @@ interface TourneeRow {
   sans_peage: number
   version: number
   deleted_at: number | null; deleted_by: string | null
+  created_by: string | null; updated_by: string | null
 }
 interface AdresseRow { id: string; label: string; ville: string; lat: number; lng: number }
 
@@ -50,6 +53,8 @@ const rowToTournee = (r: TourneeRow): Tournee => ({
   version: r.version,
   deletedAt: r.deleted_at ?? undefined,
   deletedBy: r.deleted_by ?? undefined,
+  createdBy: r.created_by ?? undefined,
+  updatedBy: r.updated_by ?? undefined,
 })
 const rowToAdresse = (r: AdresseRow): Adresse => ({
   id: r.id, label: r.label, ville: r.ville, lat: r.lat, lng: r.lng,
@@ -124,16 +129,19 @@ export async function restoreLivreur(db: D1Database, id: string): Promise<void> 
 
 export async function createTournee(
   db: D1Database,
-  input: { livreurId: string; date: string },
+  input: { livreurId: string; date: string; par?: string },
 ): Promise<Tournee> {
   // sans_peage n'est pas dans l'INSERT : la colonne porte le défaut (1 = sans péage).
   // version n'est pas dans l'INSERT non plus : la colonne porte le défaut (1).
+  // L'attribution est optionnelle par conception (pas d'authentification) : sans en-tête
+  // X-Operateur, `par` est undefined, on écrit NULL, et l'écriture n'est jamais bloquée.
   const tournee: Tournee = {
-    id: newId(), livreurId: input.livreurId, date: input.date, stops: [], sansPeage: true, version: 1,
+    id: newId(), livreurId: input.livreurId, date: input.date, stops: [],
+    sansPeage: true, version: 1, createdBy: input.par,
   }
   await db
-    .prepare('INSERT INTO tournees (id, livreur_id, date, stops_json, route_json, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
-    .bind(tournee.id, tournee.livreurId, tournee.date, '[]', null, Date.now())
+    .prepare('INSERT INTO tournees (id, livreur_id, date, stops_json, route_json, updated_at, created_by, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    .bind(tournee.id, tournee.livreurId, tournee.date, '[]', null, Date.now(), input.par ?? null, input.par ?? null)
     .run()
   return tournee
 }
@@ -230,4 +238,19 @@ export async function getCorbeille(db: D1Database): Promise<{ tournees: Tournee[
     db.prepare('SELECT * FROM livreurs WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC').all<LivreurRow>(),
   ])
   return { tournees: tou.results.map(rowToTournee), livreurs: liv.results.map(rowToLivreur) }
+}
+
+// `/api/state` pèse 3,4 Mo en prod (les géométries de tracés dominent). Avec deux postes
+// qui sondent toutes les 60 s, interroger /state à chaque fois ferait circuler des
+// gigaoctets par jour pour rien. Ce résumé reste donc minuscule à dessein : le front ne
+// recharge l'état complet que si `stamp` (le plus récent updated_at des tournées) ou
+// `livreurs` (leur simple compte) a changé depuis le dernier sondage. `livreurs` existe
+// pour attraper l'ajout d'un nouveau livreur, qui ne touche aucune tournée et donc ne
+// ferait pas bouger `stamp`.
+export async function getSync(db: D1Database): Promise<{ stamp: number; livreurs: number }> {
+  const [t, l] = await Promise.all([
+    db.prepare('SELECT MAX(updated_at) AS stamp FROM tournees').first<{ stamp: number | null }>(),
+    db.prepare('SELECT COUNT(*) AS n FROM livreurs').first<{ n: number }>(),
+  ])
+  return { stamp: t?.stamp ?? 0, livreurs: l?.n ?? 0 }
 }

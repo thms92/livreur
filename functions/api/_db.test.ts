@@ -5,7 +5,7 @@ import {
   getState, createLivreur, updateLivreur, deleteLivreur,
   createTournee, updateTournee, deleteTournee,
   upsertAdresse, deleteAdresse,
-  restoreTournee, restoreLivreur, getCorbeille,
+  restoreTournee, restoreLivreur, getCorbeille, getSync,
 } from './_db'
 
 describe('_db — livreurs', () => {
@@ -159,6 +159,19 @@ describe('_db — corbeille', () => {
     expect(vu!.deletedAt).toBeGreaterThan(0)
   })
 
+  it('restaurer un livreur le fait revenir actif (deletedAt effacé)', async () => {
+    const db = makeTestDb()
+    const l = await createLivreur(db, { nom: 'B', prenom: 'K' })
+    await deleteLivreur(db, l.id, 'Thomas')
+    expect((await getCorbeille(db)).livreurs).toHaveLength(1)
+
+    await restoreLivreur(db, l.id)
+
+    const vu = (await getState(db)).livreurs.find((x) => x.id === l.id)
+    expect(vu?.deletedAt).toBeUndefined()
+    expect((await getCorbeille(db)).livreurs).toHaveLength(0)
+  })
+
   it('la corbeille retient qui a supprimé', async () => {
     const db = makeTestDb()
     const l = await createLivreur(db, { nom: 'B', prenom: 'K' })
@@ -250,5 +263,41 @@ describe('_db — verrou optimiste', () => {
     const t = await createTournee(db, { livreurId: l.id, date: '2026-09-22' })
     const r = await updateTournee(db, t.id, { date: '2026-09-24' })
     expect(r.ok).toBe(true)
+  })
+})
+
+describe('_db — attribution et synchro', () => {
+  it('la création retient son auteur', async () => {
+    const db = makeTestDb()
+    const l = await createLivreur(db, { nom: 'B', prenom: 'K' })
+    await createTournee(db, { livreurId: l.id, date: '2026-09-22', par: 'Thomas' })
+    expect((await getState(db)).tournees[0].createdBy).toBe('Thomas')
+  })
+
+  it('la modification retient son auteur', async () => {
+    const db = makeTestDb()
+    const l = await createLivreur(db, { nom: 'B', prenom: 'K' })
+    const t = await createTournee(db, { livreurId: l.id, date: '2026-09-22', par: 'Thomas' })
+    await updateTournee(db, t.id, { date: '2026-09-23', par: 'Alexis' })
+    const vue = (await getState(db)).tournees[0]
+    expect(vue.createdBy).toBe('Thomas')
+    expect(vue.updatedBy).toBe('Alexis')
+  })
+
+  it('sans en-tête d’opérateur, l’écriture passe et l’auteur reste inconnu', async () => {
+    const db = makeTestDb()
+    const l = await createLivreur(db, { nom: 'B', prenom: 'K' })
+    const t = await createTournee(db, { livreurId: l.id, date: '2026-09-22' })
+    expect(t.createdBy).toBeUndefined()
+  })
+
+  it('le résumé de synchro bouge à chaque écriture', async () => {
+    const db = makeTestDb()
+    const l = await createLivreur(db, { nom: 'B', prenom: 'K' })
+    const avant = await getSync(db)
+    await createTournee(db, { livreurId: l.id, date: '2026-09-22' })
+    const apres = await getSync(db)
+    expect(apres.stamp).toBeGreaterThanOrEqual(avant.stamp)
+    expect(apres.livreurs).toBe(1)
   })
 })
