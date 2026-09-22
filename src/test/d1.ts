@@ -17,7 +17,10 @@ export function makeTestDb(): D1Database {
       const apiStmt = {
         bind(...a: unknown[]) { args = a; return apiStmt },
         async all<T>() { return { results: stmt.all(...args) as T[] } },
-        async run() { stmt.run(...args); return { success: true } },
+        async run() {
+          const info = stmt.run(...args)
+          return { success: true, meta: { changes: info.changes } }
+        },
         async first<T>() { return (stmt.get(...args) as T) ?? null },
       }
       return apiStmt
