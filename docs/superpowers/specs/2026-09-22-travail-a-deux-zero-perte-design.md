@@ -41,8 +41,10 @@ L'interface ne supprime plus rien : elle **marque**. Une colonne `deleted_at INT
 
 - `getState` ne renvoie que les lignes dont `deleted_at IS NULL`, **sauf** pour les livreurs :
   ceux-ci sont renvoyés avec leur marqueur, afin qu'une tournée ancienne puisse toujours
-  afficher le nom de son livreur même après son retrait. L'interface les exclut des listes
-  et des sélecteurs d'affectation, mais sait encore résoudre leur nom.
+  afficher le nom de son livreur même après son retrait. Le contexte expose donc deux vues :
+  `livreurs` (actifs seulement) pour les listes et le sélecteur d'affectation, et
+  `livreursTous` pour résoudre un nom depuis `tournee.livreurId`. Sans cette séparation, un
+  livreur mis à la corbeille resterait proposé à l'affectation d'une nouvelle tournée.
 - `deleteTournee` et `deleteLivreur` deviennent des `UPDATE ... SET deleted_at = ?`.
 - Un écran **Corbeille** liste les éléments marqués, avec leur date de suppression, l'auteur
   de la suppression, et un bouton **Restaurer** (`deleted_at = NULL`).
@@ -88,6 +90,14 @@ chaque navigateur garde la photo prise à l'ouverture. On ajoute deux déclenche
 
 - **Retour sur l'onglet** (`visibilitychange` → visible) : relecture immédiate.
 - **Minuterie** de 60 s tant que l'onglet est visible.
+
+**Ce n'est pas l'état complet qui est sondé.** `/api/state` pèse 3,4 Mo — les géométries de
+tracé en représentent l'essentiel. Le relire toutes les 60 s sur deux postes coûterait
+plusieurs gigaoctets par jour et autant de lectures D1 inutiles. On interroge donc
+`GET /api/sync`, qui renvoie quelques octets : `{ stamp, livreurs }`, où `stamp` vaut
+`MAX(updated_at)` sur les tournées et `livreurs` leur simple décompte. L'état complet n'est
+rechargé que si ce couple a changé. Le décompte des livreurs rattrape le cas d'un livreur
+ajouté, qui ne modifie aucune tournée et ne ferait donc pas bouger `stamp`.
 
 Un compteur d'écritures en vol suspend la relecture pendant qu'une requête est en cours,
 pour éviter qu'un état serveur antérieur n'écrase brièvement une mise à jour optimiste.
