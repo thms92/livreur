@@ -4,13 +4,20 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const DIR = resolve(process.cwd(), 'migrations')
-const files = readdirSync(DIR).filter((f) => f.endsWith('.sql')).sort()
 
 function migrateUpTo(stop: string) {
+  const files = readdirSync(DIR).filter((f) => f.endsWith('.sql')).sort()
   const db = new Database(':memory:')
+  let found = false
   for (const f of files) {
     db.exec(readFileSync(resolve(DIR, f), 'utf8'))
-    if (f === stop) break
+    if (f === stop) {
+      found = true
+      break
+    }
+  }
+  if (!found) {
+    throw new Error(`Migration file not found: ${stop}`)
   }
   return db
 }
