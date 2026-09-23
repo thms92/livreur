@@ -231,7 +231,7 @@ describe('LivreurContext — travail à deux', () => {
 
     expect(result.current.error).toMatch(/modifiée ailleurs/i)
     // Le message est celui destiné à l’utilisateur, pas le brut du serveur.
-    expect(result.current.error).toMatch(/rechargé/i)
+    expect(result.current.error).toMatch(/pas été enregistrée/i)
     // Pas de compte absolu : on exige un appel *supplémentaire* après le conflit.
     await waitFor(() => expect(vi.mocked(api.getState).mock.calls.length).toBeGreaterThan(appelsAvant))
     await waitFor(() => expect(result.current.tournees[0]?.date).toBe('2026-09-22'))
@@ -357,6 +357,46 @@ describe('LivreurContext — travail à deux', () => {
     expect(result.current.error).toBeNull()
     expect(result.current.tournees[0].date).toBe('2026-09-23')
     expect(result.current.tournees[0].departHeure).toBe('08:00')
+  })
+
+  // Le bandeau affirmait « Les données ont été rechargées » avant même de savoir si la
+  // relecture aboutirait. Hors ligne au moment du refus, elle échoue — et le rejet du
+  // `void recharger()` partait sans rattrapage, en rejet non traité.
+  it('un conflit ne promet pas un rechargement qui n’a pas eu lieu', async () => {
+    const { result, tid } = await tourneeNeuve()
+    vi.mocked(api.updateTournee).mockRejectedValueOnce(new ConflitError('conflit', 'modifiée ailleurs'))
+    vi.mocked(api.getState).mockRejectedValueOnce(new Error('hors ligne'))
+
+    await act(async () => { await result.current.updateTournee(tid, { date: '2026-09-23' }) })
+
+    await waitFor(() => expect(result.current.error).toMatch(/pas pu être relues/i))
+  })
+
+  // La chaîne vide est un effacement voulu ; elle devenait `undefined`, et
+  // `JSON.stringify` la faisait disparaître du corps envoyé. Le serveur gardait donc
+  // l'ancienne heure, que le prochain rechargement remettait à l'écran — et une feuille
+  // imprimée pouvait porter une heure de départ que l'exploitant croyait avoir retirée.
+  it('effacer une heure de départ part bien au serveur', async () => {
+    const { result, tid } = await tourneeNeuve()
+    await act(async () => { await result.current.setTourneeHeure(tid, { departHeure: '08:00' }) })
+
+    await act(async () => { await result.current.setTourneeHeure(tid, { departHeure: '' }) })
+
+    const patch = vi.mocked(api.updateTournee).mock.calls.at(-1)?.[1]
+    expect(JSON.stringify(patch)).toContain('"departHeure":""')
+    // À l'écran, chaîne vide et absence d'heure doivent rester indiscernables.
+    expect(result.current.tournees[0].departHeure).toBeFalsy()
+  })
+
+  it('effacer une heure de retour aussi', async () => {
+    const { result, tid } = await tourneeNeuve()
+    await act(async () => { await result.current.setTourneeHeure(tid, { retourHeure: '17:00' }) })
+
+    await act(async () => { await result.current.setTourneeHeure(tid, { retourHeure: '' }) })
+
+    expect(JSON.stringify(vi.mocked(api.updateTournee).mock.calls.at(-1)?.[1]))
+      .toContain('"retourHeure":""')
+    expect(result.current.tournees[0].retourHeure).toBeFalsy()
   })
 
   it('restaurer remet l’élément puis relit l’état', async () => {

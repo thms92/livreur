@@ -35,7 +35,21 @@ export function TourneeEditor({ tourneeId, onClose }: Props) {
   // que les actifs — on ne réaffecte pas une tournée à quelqu'un qui n'est plus là.
   const livreur = livreursTous.find((l) => l.id === tournee?.livreurId)
 
-  if (!tournee) return null
+  // La tournée peut disparaître sous l'éditeur : le sondage adopte l'état du serveur, et
+  // le collègue a pu la mettre à la corbeille entre-temps. Rendre `null` laissait tout le
+  // volet Tournées vide — `TourneesSection` est déjà repartie en avance, il n'y avait donc
+  // ni liste, ni message, ni bouton « ← Retour » (il vit ici) : il fallait recharger la page.
+  if (!tournee) {
+    return (
+      <section className="section">
+        <p className="empty">
+          Cette tournée n’est plus disponible. Elle a sans doute été supprimée depuis un
+          autre poste ; vous la retrouverez dans la Corbeille.
+        </p>
+        <button className="btn-primary" onClick={onClose}>← Retour aux tournées</button>
+      </section>
+    )
+  }
 
   return (
     <div className="tournee-editor">

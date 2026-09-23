@@ -88,6 +88,24 @@ describe('TourneeEditor — attribution', () => {
   })
 })
 
+// Le sondage adopte l'état du serveur toutes les 60 s : si le collègue met à la corbeille
+// la tournée ouverte ici, elle quitte `tournees` sous les pieds de l'éditeur. Rendre
+// `null` laissait alors tout le volet Tournées vide — pas de liste, pas de message, et
+// surtout pas le bouton « ← Retour », qui vit dans l'éditeur : seul un rechargement de la
+// page permettait d'en sortir.
+describe('TourneeEditor — tournée disparue', () => {
+  it('explique la disparition et laisse revenir à la liste', async () => {
+    override = {}
+    const onClose = vi.fn()
+
+    render(<TourneeEditor tourneeId="t-disparue" onClose={onClose} />)
+
+    expect(screen.getByText(/plus disponible/i)).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /retour/i }))
+    expect(onClose).toHaveBeenCalled()
+  })
+})
+
 describe('TourneeEditor — affectation', () => {
   it('n’offre que les livreurs actifs dans le sélecteur', () => {
     override = {}

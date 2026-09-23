@@ -56,8 +56,8 @@ describe('api — travail à deux', () => {
 
   it('traduit un 410 en disparition', async () => {
     mockFetch({ error: 'supprimée' }, false, 410)
-    await api.updateTournee('t1', { date: 'x' }).catch((e: ConflitError) => {
-      expect(e.type).toBe('absente')
-    })
+    // Assertion sur le rejet lui-même : un `expect` posé dans un `.catch()` ne s'exécute
+    // pas si la promesse cesse d'être rejetée — le test passerait alors sans rien vérifier.
+    await expect(api.updateTournee('t1', { date: 'x' })).rejects.toMatchObject({ type: 'absente' })
   })
 })

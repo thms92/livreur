@@ -241,12 +241,21 @@ export function LivreurProvider({ children }: { children: ReactNode }) {
    */
   const fail = useCallback((e: unknown) => {
     if (e instanceof ConflitError) {
-      setError(
-        e.type === 'conflit'
-          ? 'Cette tournée a été modifiée ailleurs. Les données ont été rechargées.'
-          : 'Cette tournée a été supprimée ailleurs. Les données ont été rechargées.',
-      )
-      void recharger()
+      const cause = e.type === 'conflit'
+        ? 'Cette tournée a été modifiée ailleurs.'
+        : 'Cette tournée a été supprimée ailleurs.'
+      // Le bandeau ne promet pas ce qui n'a pas encore eu lieu : la relecture est lancée,
+      // elle peut échouer (réseau coupé au moment du refus) ou renoncer à adopter (une
+      // écriture est repartie entre-temps). Son rejet est rattrapé — sans quoi il partait
+      // en rejet non traité — et l'échec se dit, au lieu de laisser croire à une remise
+      // à jour qui n'a pas eu lieu.
+      setError(`${cause} Votre modification n’a pas été enregistrée ; relecture des données en cours.`)
+      void recharger().catch(() => {
+        setError(
+          `${cause} Votre modification n’a pas été enregistrée, et les données n’ont pas pu` +
+          ' être relues : vérifiez votre connexion.',
+        )
+      })
       return
     }
     setError(e instanceof Error ? e.message : 'Échec de l’enregistrement')
@@ -474,9 +483,16 @@ export function LivreurProvider({ children }: { children: ReactNode }) {
   const setTourneeHeure = useCallback(
     async (tourneeId: string, patch: { departHeure?: string; retourHeure?: string }) => {
       const prev = tournees
+      // La chaîne vide est conservée telle quelle : c'est un effacement voulu, et le
+      // serveur le traite (`patch.departHeure || null` → NULL). La ramener à `undefined`
+      // la faisait disparaître du corps au `JSON.stringify` : l'écran montrait l'heure
+      // effacée, le serveur gardait l'ancienne, et le rechargement suivant la remettait —
+      // une feuille imprimée pouvait alors porter une heure de départ qu'on croyait
+      // retirée. À l'affichage, `''` et `undefined` sont indiscernables (`?? ''` côté
+      // saisie, test de vérité côté feuille imprimée).
       const norm: TourneeExtra = {}
-      if (patch.departHeure !== undefined) norm.departHeure = patch.departHeure || undefined
-      if (patch.retourHeure !== undefined) norm.retourHeure = patch.retourHeure || undefined
+      if (patch.departHeure !== undefined) norm.departHeure = patch.departHeure
+      if (patch.retourHeure !== undefined) norm.retourHeure = patch.retourHeure
       setTournees((p) => p.map((x) => (x.id === tourneeId ? { ...x, ...norm } : x)))
       try {
         await ecrireTournee(tourneeId, norm)
