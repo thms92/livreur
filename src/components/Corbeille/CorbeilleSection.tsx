@@ -10,8 +10,18 @@ export function CorbeilleSection() {
   // et c'est justement ici, avant de restaurer, qu'il faut pouvoir le nommer.
   const { restaurer, livreursTous } = useLivreur()
   const [contenu, setContenu] = useState<{ tournees: Tournee[]; livreurs: Livreur[] } | null>(null)
+  const [erreur, setErreur] = useState<string | null>(null)
 
-  const charger = useCallback(() => { void api.getCorbeille().then(setContenu) }, [])
+  // Une lecture qui échoue doit se voir. Sans ce rattrapage, l'écran resterait sur
+  // « Chargement… » indéfiniment et le rejet finirait non traité dans la console —
+  // sur le seul écran dont le métier est de rendre ce qui a été supprimé par erreur.
+  // Les deux états ne changent que dans les suites de la promesse : appeler setState
+  // directement dans le corps de l'effet déclencherait des rendus en cascade (lint).
+  const charger = useCallback(() => {
+    void api.getCorbeille()
+      .then((c) => { setContenu(c); setErreur(null) })
+      .catch(() => setErreur('Lecture de la corbeille impossible. Vérifiez votre connexion et rechargez.'))
+  }, [])
   useEffect(charger, [charger])
 
   const rendre = async (id: string, type: 'tournee' | 'livreur') => {
@@ -19,6 +29,7 @@ export function CorbeilleSection() {
     charger()
   }
 
+  if (erreur) return <p className="error-banner" role="alert">{erreur}</p>
   if (!contenu) return <p className="empty">Chargement…</p>
   const vide = !contenu.tournees.length && !contenu.livreurs.length
 

@@ -53,4 +53,15 @@ describe('CorbeilleSection', () => {
     render(<CorbeilleSection />)
     expect(await screen.findByText('Julian MACE')).toBeInTheDocument()
   })
+
+  // Une lecture qui échoue sans être rattrapée laisserait l'écran sur « Chargement… »
+  // indéfiniment, sans rien dire — sur le seul écran dont le métier est de rendre ce
+  // qu'on a supprimé par erreur.
+  it('annonce l’échec de lecture au lieu de rester sur le chargement', async () => {
+    const { api } = await import('../../services/api')
+    vi.mocked(api.getCorbeille).mockRejectedValueOnce(new Error('réseau'))
+    render(<CorbeilleSection />)
+    expect(await screen.findByRole('alert')).toHaveTextContent(/corbeille/i)
+    expect(screen.queryByText('Chargement…')).not.toBeInTheDocument()
+  })
 })
