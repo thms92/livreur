@@ -7,6 +7,7 @@ const ITEMS: { id: Section; label: string; icon: string }[] = [
   { id: 'tournees', label: 'Tournées', icon: '🗺️' },
   { id: 'chauffeurs', label: 'Chauffeurs', icon: '📋' },
   { id: 'historique', label: 'Historique', icon: '🗂️' },
+  { id: 'corbeille', label: 'Corbeille', icon: '🗑️' },
 ]
 
 export function Sidebar() {

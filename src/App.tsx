@@ -4,6 +4,7 @@ import { LivreursSection } from './components/Livreurs/LivreursSection'
 import { TourneesSection } from './components/Tournees/TourneesSection'
 import { ChauffeursSection } from './components/Chauffeurs/ChauffeursSection'
 import { HistoriqueSection } from './components/Historique/HistoriqueSection'
+import { CorbeilleSection } from './components/Corbeille/CorbeilleSection'
 
 function Shell() {
   const { section, loading, error, dismissError } = useLivreur()
@@ -22,6 +23,7 @@ function Shell() {
         {section === 'tournees' && <TourneesSection />}
         {section === 'chauffeurs' && <ChauffeursSection />}
         {section === 'historique' && <HistoriqueSection />}
+        {section === 'corbeille' && <CorbeilleSection />}
       </main>
     </div>
   )

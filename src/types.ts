@@ -1,5 +1,5 @@
 export type Theme = 'light' | 'dark'
-export type Section = 'livreurs' | 'tournees' | 'chauffeurs' | 'historique'
+export type Section = 'livreurs' | 'tournees' | 'chauffeurs' | 'historique' | 'corbeille'
 
 export interface LatLng {
   lat: number
@@ -12,6 +12,10 @@ export interface Livreur {
   prenom: string
   telephone: string
   colorIndex: number
+  // Marqueurs de corbeille. Un livreur supprimé n'est jamais effacé : il quitte les listes
+  // et les sélecteurs, mais reste lisible pour nommer le livreur d'une tournée ancienne.
+  deletedAt?: number
+  deletedBy?: string
 }
 
 /** Un arrêt-client d'une tournée (le dépôt n'est jamais stocké ici). */
@@ -47,6 +51,12 @@ export interface Tournee {
   // optimiste. Optionnelle : une tournée construite hors serveur (tests) n'en a pas,
   // et l'écriture passe alors sans contrôle, comme avant.
   version?: number
+  // Marqueurs de corbeille : posés à la suppression, effacés à la restauration.
+  deletedAt?: number
+  deletedBy?: string
+  // Attribution des écritures, pour savoir qui a fait quoi entre collègues.
+  createdBy?: string
+  updatedBy?: string
 }
 
 export interface Suggestion {
