@@ -63,6 +63,13 @@ export function TourneeEditor({ tourneeId, onClose }: Props) {
           </label>
         </div>
 
+        {(tournee.createdBy || tournee.updatedBy) && (
+          <p className="muted attribution">
+            {tournee.createdBy ? `Créée par ${tournee.createdBy}` : ''}
+            {tournee.updatedBy ? ` · modifiée par ${tournee.updatedBy}` : ''}
+          </p>
+        )}
+
         <div className="field">
           <span>Ajouter un arrêt</span>
           <AddressAutocomplete

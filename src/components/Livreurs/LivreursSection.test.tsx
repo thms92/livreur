@@ -43,6 +43,20 @@ describe('LivreursSection', () => {
     expect(screen.queryByText(/Benali/)).not.toBeInTheDocument()
   })
 
+  it('annonce que les tournées sont conservées avant la mise à la corbeille', async () => {
+    const demande = vi.fn(() => false)
+    vi.stubGlobal('confirm', demande)
+    renderSection()
+    await userEvent.type(screen.getByLabelText('Nom'), 'Benali')
+    await userEvent.type(screen.getByLabelText('Prénom'), 'Karim')
+    await userEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
+    await userEvent.click(await screen.findByRole('button', { name: /Supprimer/ }))
+    expect(demande).toHaveBeenCalledWith(
+      'Mettre Karim Benali à la corbeille ? Ses tournées sont conservées.',
+    )
+    vi.unstubAllGlobals()
+  })
+
   it('supprime un livreur', async () => {
     vi.stubGlobal('confirm', () => true)
     renderSection()

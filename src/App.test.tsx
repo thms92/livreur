@@ -34,6 +34,10 @@ describe('App (smoke)', () => {
   it('créer un livreur → créer une tournée → le retrouver dans Chauffeurs', async () => {
     render(<App />)
 
+    // Le poste se nomme d'abord : l'application ne s'ouvre qu'ensuite.
+    await userEvent.type(screen.getByLabelText(/votre nom/i), 'Thomas')
+    await userEvent.click(screen.getByRole('button', { name: /continuer/i }))
+
     // attendre la fin du chargement initial (getState)
     await userEvent.click(await screen.findByRole('button', { name: /Livreurs/ }))
     await userEvent.type(screen.getByLabelText('Nom'), 'Benali')

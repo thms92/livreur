@@ -324,12 +324,18 @@ export function LivreurProvider({ children }: { children: ReactNode }) {
     try { await ecrire(() => api.updateLivreur(id, patch)) } catch (e) { setLivreursRaw(prev); fail(e) }
   }, [livreursRaw, ecrire, fail])
 
+  /**
+   * Mise à la corbeille d'un livreur. Le serveur le marque et garde ses tournées : la
+   * mise à jour optimiste doit faire de même, sinon l'écran cascade là où le serveur ne
+   * cascade plus — les tournées disparaîtraient pour revenir seules au prochain sondage,
+   * et l'écran démentirait la confirmation qu'il vient d'afficher. Le marqueur local suffit
+   * à le sortir des listes ; l'horodatage exact viendra du serveur à la prochaine lecture.
+   */
   const removeLivreur = useCallback(async (id: string) => {
-    const prevL = livreursRaw, prevT = tournees
-    setLivreursRaw((p) => p.filter((l) => l.id !== id))
-    setTournees((p) => p.filter((t) => t.livreurId !== id))
-    try { await ecrire(() => api.deleteLivreur(id)) } catch (e) { setLivreursRaw(prevL); setTournees(prevT); fail(e) }
-  }, [livreursRaw, tournees, ecrire, fail])
+    const prevL = livreursRaw
+    setLivreursRaw((p) => p.map((l) => (l.id === id ? { ...l, deletedAt: Date.now() } : l)))
+    try { await ecrire(() => api.deleteLivreur(id)) } catch (e) { setLivreursRaw(prevL); fail(e) }
+  }, [livreursRaw, ecrire, fail])
 
   const addTournee = useCallback(async (input: { livreurId: string; date: string }) => {
     try {

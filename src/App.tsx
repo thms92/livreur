@@ -5,6 +5,7 @@ import { TourneesSection } from './components/Tournees/TourneesSection'
 import { ChauffeursSection } from './components/Chauffeurs/ChauffeursSection'
 import { HistoriqueSection } from './components/Historique/HistoriqueSection'
 import { CorbeilleSection } from './components/Corbeille/CorbeilleSection'
+import { OperateurGate } from './components/OperateurGate'
 
 function Shell() {
   const { section, loading, error, dismissError } = useLivreur()
@@ -30,9 +31,13 @@ function Shell() {
 }
 
 export function App() {
+  // Le portillon enveloppe le provider : aucune requête ne part de ce poste avant
+  // qu'il porte un nom, donc aucune écriture n'arrive au serveur sans son auteur.
   return (
-    <LivreurProvider>
-      <Shell />
-    </LivreurProvider>
+    <OperateurGate>
+      <LivreurProvider>
+        <Shell />
+      </LivreurProvider>
+    </OperateurGate>
   )
 }

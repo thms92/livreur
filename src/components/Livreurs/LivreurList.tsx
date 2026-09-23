@@ -7,11 +7,10 @@ export function LivreurList() {
     return <p className="empty">Aucun livreur. Ajoutez-en un avec le formulaire.</p>
   }
 
+  // La suppression d'un livreur n'emporte plus ses tournées : elles restent en place,
+  // et lui-même part à la corbeille. Le message doit dire cela, et rien de plus.
   function onRemove(id: string, nomComplet: string) {
-    const count = tournees.filter((t) => t.livreurId === id).length
-    const msg = count
-      ? `Supprimer ${nomComplet} et ses ${count} tournée(s) ?`
-      : `Supprimer ${nomComplet} ?`
+    const msg = `Mettre ${nomComplet} à la corbeille ? Ses tournées sont conservées.`
     if (confirm(msg)) removeLivreur(id)
   }
 

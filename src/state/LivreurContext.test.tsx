@@ -116,7 +116,7 @@ describe('LivreurContext (API)', () => {
     expect(src.stops.map((s) => s.label)).toEqual(['X'])
   })
 
-  it('removeLivreur supprime le livreur et ses tournées (optimiste)', async () => {
+  it('removeLivreur met le livreur à la corbeille et conserve ses tournées (optimiste)', async () => {
     const { result } = await ready()
     await act(async () => { await result.current.addLivreur({ nom: 'B', prenom: 'K', telephone: '' }) })
     const id = result.current.livreurs[0].id
@@ -125,8 +125,12 @@ describe('LivreurContext (API)', () => {
     })
     await act(async () => { await result.current.removeLivreur(id) })
     expect(api.deleteLivreur).toHaveBeenCalledWith(id)
+    // Le serveur ne cascade plus : il marque le livreur et laisse ses tournées. L'écran
+    // doit montrer exactement cela, sinon il dément la confirmation qu'il vient d'afficher
+    // — et les tournées réapparaîtraient toutes seules au prochain sondage.
     expect(result.current.livreurs).toEqual([])
-    expect(result.current.tournees).toEqual([])
+    expect(result.current.livreursTous.map((l) => l.id)).toEqual([id])
+    expect(result.current.tournees).toHaveLength(1)
   })
 
   async function tourneeAvecArret() {

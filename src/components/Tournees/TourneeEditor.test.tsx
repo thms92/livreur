@@ -73,6 +73,21 @@ describe('TourneeEditor — option péage', () => {
   })
 })
 
+describe('TourneeEditor — attribution', () => {
+  it('indique qui a créé et qui a modifié la tournée', () => {
+    override = { createdBy: 'Thomas', updatedBy: 'Alexis' }
+    render(<TourneeEditor tourneeId="t1" onClose={() => {}} />)
+    expect(screen.getByText(/Créée par Thomas/)).toBeInTheDocument()
+    expect(screen.getByText(/modifiée par Alexis/)).toBeInTheDocument()
+  })
+
+  it('ne montre rien quand l’attribution est inconnue', () => {
+    override = { createdBy: undefined, updatedBy: undefined }
+    render(<TourneeEditor tourneeId="t1" onClose={() => {}} />)
+    expect(screen.queryByText(/Créée par/)).not.toBeInTheDocument()
+  })
+})
+
 describe('TourneeEditor — affectation', () => {
   it('n’offre que les livreurs actifs dans le sélecteur', () => {
     override = {}

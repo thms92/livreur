@@ -254,3 +254,7 @@ button { font-family: inherit; cursor: pointer; }
   background: var(--surface-2); color: var(--text); cursor: pointer; text-align: left;
 }
 .dup-livreur:hover { background: var(--surface-3); }
+
+/* Identité du poste (portillon) et attribution des écritures */
+.operateur-gate { max-width: 420px; margin: 15vh auto; display: flex; flex-direction: column; gap: 14px; }
+.attribution { font-size: 12px; }
