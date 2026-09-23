@@ -179,6 +179,58 @@ describe('_db — corbeille', () => {
     await deleteTournee(db, t.id, 'Alexis')
     expect((await getCorbeille(db)).tournees[0].deletedBy).toBe('Alexis')
   })
+
+  // `deleted_by` est écrit pour les livreurs comme pour les tournées, mais il ne servait
+  // à rien tant qu'il ne remontait pas : la corbeille ne pouvait jamais dire qui avait
+  // retiré un livreur, alors que l'écran est prévu pour l'afficher.
+  it('la corbeille retient aussi qui a supprimé un livreur', async () => {
+    const db = makeTestDb()
+    const l = await createLivreur(db, { nom: 'B', prenom: 'K' })
+
+    await deleteLivreur(db, l.id, 'Alexis')
+
+    expect((await getCorbeille(db)).livreurs[0].deletedBy).toBe('Alexis')
+    // Le livreur marqué reste aussi dans l'état courant : l'attribution l'y suit.
+    expect((await getState(db)).livreurs[0].deletedBy).toBe('Alexis')
+  })
+
+  // Supprimer deux fois écrasait l'horodatage et le nom du vrai auteur de la suppression :
+  // la corbeille accusait alors le second passant, et la date réelle était perdue.
+  it('supprimer une tournée déjà en corbeille ne réécrit pas qui l’a supprimée', async () => {
+    const db = makeTestDb()
+    const l = await createLivreur(db, { nom: 'B', prenom: 'K' })
+    const t = await createTournee(db, { livreurId: l.id, date: '2026-09-22' })
+    await deleteTournee(db, t.id, 'Alexis')
+    const avant = await db
+      .prepare('SELECT deleted_at, deleted_by FROM tournees WHERE id = ?')
+      .bind(t.id)
+      .first()
+
+    await deleteTournee(db, t.id, 'Thomas')
+
+    const apres = await db
+      .prepare('SELECT deleted_at, deleted_by FROM tournees WHERE id = ?')
+      .bind(t.id)
+      .first()
+    expect(apres).toEqual(avant)
+  })
+
+  // Une restauration qui ne trouve rien doit le dire : sinon la route répond « c'est fait »
+  // pour un identifiant inconnu ou d'un autre type, et l'élément reste là sans explication.
+  it('restaurer signale si une ligne a bien été rendue', async () => {
+    const db = makeTestDb()
+    const l = await createLivreur(db, { nom: 'B', prenom: 'K' })
+    const t = await createTournee(db, { livreurId: l.id, date: '2026-09-22' })
+    await deleteTournee(db, t.id, 'Thomas')
+    await deleteLivreur(db, l.id, 'Thomas')
+
+    expect(await restoreTournee(db, t.id)).toBe(true)
+    expect(await restoreLivreur(db, l.id)).toBe(true)
+    // Identifiant inconnu, ou du mauvais type : rien n'a été rendu.
+    expect(await restoreTournee(db, 'inconnue')).toBe(false)
+    expect(await restoreLivreur(db, 'inconnu')).toBe(false)
+    expect(await restoreTournee(db, l.id)).toBe(false)
+  })
 })
 
 describe('_db — verrou optimiste', () => {
@@ -289,6 +341,20 @@ describe('_db — attribution et synchro', () => {
     const l = await createLivreur(db, { nom: 'B', prenom: 'K' })
     const t = await createTournee(db, { livreurId: l.id, date: '2026-09-22' })
     expect(t.createdBy).toBeUndefined()
+  })
+
+  // Écraser l'attribution par NULL, c'est perdre une information que personne ne peut
+  // retrouver. Une écriture anonyme ne sait pas qui écrit : elle n'a rien à dire sur
+  // l'auteur, donc elle laisse le dernier auteur connu en place.
+  it('une écriture sans opérateur n’efface pas l’attribution précédente', async () => {
+    const db = makeTestDb()
+    const l = await createLivreur(db, { nom: 'B', prenom: 'K' })
+    const t = await createTournee(db, { livreurId: l.id, date: '2026-09-22', par: 'Thomas' })
+    await updateTournee(db, t.id, { date: '2026-09-23', version: 1, par: 'Alexis' })
+
+    await updateTournee(db, t.id, { date: '2026-09-24', version: 2 })
+
+    expect((await getState(db)).tournees[0].updatedBy).toBe('Alexis')
   })
 
   it('le résumé de synchro bouge à chaque écriture', async () => {

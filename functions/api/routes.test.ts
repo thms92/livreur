@@ -4,6 +4,8 @@ import { onRequestGet as getState } from './state'
 import { onRequestPost as postLivreur } from './livreurs/index'
 import { onRequestDelete as deleteLivreur } from './livreurs/[id]'
 import { onRequestPut as putTournee, onRequestDelete as deleteTourneeRoute } from './tournees/[id]'
+import { onRequestGet as getCorbeille } from './corbeille/index'
+import { onRequestPost as postRestore } from './corbeille/[id]'
 import { createLivreur, createTournee, deleteTournee } from './_db'
 import type { D1Database } from '@cloudflare/workers-types'
 
@@ -65,6 +67,57 @@ describe('routes API', () => {
   })
 })
 
+describe('GET /corbeille', () => {
+  // L'écran Corbeille affiche « supprimé par … » : encore faut-il que le nom traverse
+  // l'API. Écrit en base mais jamais relu, il n'aurait jamais pu s'afficher.
+  it('la charge utile porte qui a supprimé le livreur', async () => {
+    const db = makeTestDb()
+    const created = await postLivreur(ctx(db, { body: { nom: 'B', prenom: 'K' } }))
+    const { id } = await created.json()
+    await deleteLivreur(ctx(db, { params: { id }, headers: { 'X-Operateur': 'Thomas' } }))
+
+    const corbeille = await (await getCorbeille({ env: { DB: db } } as never)).json()
+
+    expect(corbeille.livreurs[0]).toMatchObject({ id, deletedBy: 'Thomas' })
+  })
+})
+
+describe('POST /corbeille/:id — restauration', () => {
+  it('restaure l’élément demandé', async () => {
+    const db = makeTestDb()
+    const l = await createLivreur(db, { nom: 'B', prenom: 'K' })
+    const t = await createTournee(db, { livreurId: l.id, date: '2026-09-22' })
+    await deleteTournee(db, t.id, 'Thomas')
+
+    const res = await postRestore(ctx(db, { params: { id: t.id }, body: { type: 'tournee' } }))
+
+    expect(res.status).toBe(200)
+    const state = await (await getState({ env: { DB: db } } as never)).json()
+    expect(state.tournees.map((x: { id: string }) => x.id)).toEqual([t.id])
+  })
+
+  // Un identifiant inconnu, ou du bon identifiant avec le mauvais type, ne touchait
+  // aucune ligne et répondait pourtant « c'est fait » : l'écran se rechargeait, l'élément
+  // était toujours là, et rien n'expliquait pourquoi.
+  it('un type qui ne correspond pas à l’élément → 404 au lieu d’un faux succès', async () => {
+    const db = makeTestDb()
+    const created = await postLivreur(ctx(db, { body: { nom: 'M', prenom: 'L' } }))
+    const { id } = await created.json()
+    await deleteLivreur(ctx(db, { params: { id } }))
+
+    // Un livreur restauré comme s'il était une tournée.
+    const res = await postRestore(ctx(db, { params: { id }, body: { type: 'tournee' } }))
+
+    expect(res.status).toBe(404)
+  })
+
+  it('un identifiant inconnu → 404', async () => {
+    const db = makeTestDb()
+    const res = await postRestore(ctx(db, { params: { id: 'inconnu' }, body: { type: 'livreur' } }))
+    expect(res.status).toBe(404)
+  })
+})
+
 // Le code HTTP EST le contrat que le front distingue (200 accepté, 409 conflit à relire,
 // 410 tournée disparue) : sans ces tests, rien ne signale une régression sur la traduction
 // ResultatEcriture → réponse, et ce fichier n'est de toute façon pas couvert par tsc -b
@@ -111,6 +164,36 @@ describe('PUT /tournees/:id — verrou optimiste (409/410)', () => {
     expect(res.status).toBe(410)
   })
 
+  // Le verrou ne vaut que s'il est obligatoire. Une écriture sans version repasserait en
+  // « dernier arrivé gagne » sans que personne ne le voie — or un onglet resté ouvert sur
+  // le bundle d'avant le déploiement envoie exactement cela, et il écraserait le travail
+  // de l'autre poste en silence. La route exige donc la version, toujours.
+  it('sans version → 400, et la tournée n’a pas bougé', async () => {
+    const db = makeTestDb()
+    const l = await createLivreur(db, { nom: 'B', prenom: 'K' })
+    const t = await createTournee(db, { livreurId: l.id, date: '2026-09-22' })
+
+    const res = await putTournee(ctx(db, {
+      method: 'PUT', params: { id: t.id }, body: { date: '2999-01-01' },
+    }))
+
+    expect(res.status).toBe(400)
+    const state = await (await getState({ env: { DB: db } } as never)).json()
+    expect(state.tournees[0].date).toBe('2026-09-22')
+  })
+
+  it('une version qui n’est pas un nombre est traitée comme absente', async () => {
+    const db = makeTestDb()
+    const l = await createLivreur(db, { nom: 'B', prenom: 'K' })
+    const t = await createTournee(db, { livreurId: l.id, date: '2026-09-22' })
+
+    const res = await putTournee(ctx(db, {
+      method: 'PUT', params: { id: t.id }, body: { date: '2999-01-01', version: null },
+    }))
+
+    expect(res.status).toBe(400)
+  })
+
   it('l’en-tête X-Operateur est reporté dans updated_by', async () => {
     const db = makeTestDb()
     const l = await createLivreur(db, { nom: 'B', prenom: 'K' })
@@ -120,7 +203,7 @@ describe('PUT /tournees/:id — verrou optimiste (409/410)', () => {
       method: 'PUT',
       params: { id: t.id },
       headers: { 'X-Operateur': 'Thomas' },
-      body: { date: '2026-09-23' },
+      body: { date: '2026-09-23', version: 1 },
     }))
 
     expect(res.status).toBe(200)

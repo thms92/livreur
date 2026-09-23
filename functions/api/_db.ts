@@ -3,6 +3,7 @@ import type { D1Database } from '@cloudflare/workers-types'
 export interface Livreur {
   id: string; nom: string; prenom: string; telephone: string; colorIndex: number
   deletedAt?: number
+  deletedBy?: string
 }
 export interface Stop { id: string; label: string; ville: string; lat: number; lng: number; heure?: string }
 export interface RouteResult {
@@ -22,7 +23,7 @@ export interface Adresse { id: string; label: string; ville: string; lat: number
 
 interface LivreurRow {
   id: string; nom: string; prenom: string; telephone: string; color_index: number; created_at: number
-  deleted_at: number | null
+  deleted_at: number | null; deleted_by: string | null
 }
 interface TourneeRow {
   id: string; livreur_id: string; date: string; stops_json: string; route_json: string | null; updated_at: number
@@ -41,6 +42,9 @@ function newId(): string {
 const rowToLivreur = (r: LivreurRow): Livreur => ({
   id: r.id, nom: r.nom, prenom: r.prenom, telephone: r.telephone, colorIndex: r.color_index,
   deletedAt: r.deleted_at ?? undefined,
+  // `deleted_by` est écrit à la suppression : sans ce report, la corbeille ne pourrait
+  // jamais dire qui a retiré un livreur, alors qu'elle est faite pour l'afficher.
+  deletedBy: r.deleted_by ?? undefined,
 })
 const rowToTournee = (r: TourneeRow): Tournee => ({
   id: r.id, livreurId: r.livreur_id, date: r.date,
@@ -123,8 +127,13 @@ export async function deleteLivreur(db: D1Database, id: string, par?: string): P
     .run()
 }
 
-export async function restoreLivreur(db: D1Database, id: string): Promise<void> {
-  await db.prepare('UPDATE livreurs SET deleted_at = NULL, deleted_by = NULL WHERE id = ?').bind(id).run()
+/** Renvoie `true` si une ligne a bien été rendue (identifiant connu), `false` sinon. */
+export async function restoreLivreur(db: D1Database, id: string): Promise<boolean> {
+  const res = await db
+    .prepare('UPDATE livreurs SET deleted_at = NULL, deleted_by = NULL WHERE id = ?')
+    .bind(id)
+    .run()
+  return res.meta.changes > 0
 }
 
 export async function createTournee(
@@ -169,7 +178,10 @@ export async function updateTournee(
   if (patch.retourHeure !== undefined) { sets.push('retour_heure = ?'); vals.push(patch.retourHeure || null) }
   if (patch.ordreManuel !== undefined) { sets.push('ordre_manuel = ?'); vals.push(patch.ordreManuel ? 1 : 0) }
   if (patch.sansPeage !== undefined) { sets.push('sans_peage = ?'); vals.push(patch.sansPeage ? 1 : 0) }
-  sets.push('updated_by = ?'); vals.push(patch.par ?? null)
+  // Seulement si on sait qui écrit : une écriture anonyme (pas d'en-tête X-Operateur)
+  // n'a rien à dire sur l'auteur, et écraser le dernier auteur connu par NULL perdrait
+  // une information que personne ne peut retrouver.
+  if (patch.par !== undefined) { sets.push('updated_by = ?'); vals.push(patch.par) }
   sets.push('updated_at = ?'); vals.push(Date.now())
   sets.push('version = version + 1')
 
@@ -206,18 +218,27 @@ export async function updateTournee(
   return { ok: false, raison: vivante ? 'conflit' : 'absente' }
 }
 
+// `AND deleted_at IS NULL` : une seconde suppression de la même tournée réécrirait
+// l'horodatage et le nom du vrai auteur, qu'on ne pourrait plus retrouver. La première
+// suppression fait foi ; les suivantes ne touchent rien.
 export async function deleteTournee(db: D1Database, id: string, par?: string): Promise<void> {
   await db
-    .prepare('UPDATE tournees SET deleted_at = ?, deleted_by = ?, updated_at = ? WHERE id = ?')
+    .prepare('UPDATE tournees SET deleted_at = ?, deleted_by = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL')
     .bind(Date.now(), par ?? null, Date.now(), id)
     .run()
 }
 
-export async function restoreTournee(db: D1Database, id: string): Promise<void> {
-  await db
+/**
+ * Renvoie `true` si une ligne a bien été rendue (identifiant connu), `false` sinon.
+ * La garde porte sur l'identifiant seul, pas sur `deleted_at` : restaurer une tournée que
+ * l'autre poste vient déjà de restaurer n'est pas une erreur à signaler à l'utilisateur.
+ */
+export async function restoreTournee(db: D1Database, id: string): Promise<boolean> {
+  const res = await db
     .prepare('UPDATE tournees SET deleted_at = NULL, deleted_by = NULL, updated_at = ? WHERE id = ?')
     .bind(Date.now(), id)
     .run()
+  return res.meta.changes > 0
 }
 
 export async function upsertAdresse(db: D1Database, a: Adresse): Promise<void> {
