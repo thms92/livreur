@@ -30,3 +30,6 @@ dist-ssr
 
 # Sauvegardes de la base (donnees clients) — ne jamais versionner
 backups/
+
+# Worktrees créés par Claude Code — jamais versionnés, et exclus des tests
+.claude/
