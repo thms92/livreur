@@ -105,68 +105,106 @@ export function LivreurProvider({ children }: { children: ReactNode }) {
   // Écritures en vol : on ne sonde pas tant qu'une requête est en cours, sinon un état
   // serveur antérieur écraserait brièvement une mise à jour optimiste pas encore confirmée.
   const enVol = useRef(0)
+  // Nombre total d'écritures lancées depuis le démarrage. Sert de jeton : une lecture
+  // complète qui voit ce compteur bouger sait qu'elle a doublé une écriture et s'abstient.
+  const ecrituresLancees = useRef(0)
   // Dernier résumé de synchro vu (clefSync), pour ne recharger que sur un vrai changement.
   const dernierStamp = useRef(0)
+  // Version détenue pour chaque tournée. Elle vit dans une ref, pas dans l'état React :
+  // il faut pouvoir la lire à l'instant de l'envoi (une copie figée dans la closure d'un
+  // appelant serait déjà périmée si une autre écriture est passée entre-temps) et elle ne
+  // doit pas être emportée par l'annulation optimiste d'une écriture voisine.
+  const versions = useRef(new Map<string, number>())
+  // Une écriture en cours par tournée : deux modifications rapprochées sur la même tournée
+  // partent l'une après l'autre, sinon la seconde emporterait la version d'avant la
+  // première et le serveur la refuserait — un conflit avec soi-même.
+  const filesEcriture = useRef(new Map<string, Promise<unknown>>())
+
+  /** Enregistre les versions détenues d'après un état serveur complet. */
+  const adopterVersions = useCallback((ts: Tournee[]) => {
+    const m = new Map<string, number>()
+    for (const t of ts) if (t.version !== undefined) m.set(t.id, t.version)
+    versions.current = m
+  }, [])
 
   /** Encadre une écriture serveur : le sondage se tait tant qu'elle est en vol. */
   const ecrire = useCallback(async <T,>(appel: () => Promise<T>): Promise<T> => {
     enVol.current++
+    ecrituresLancees.current++
     try { return await appel() } finally { enVol.current-- }
   }, [])
 
-  /**
-   * Note le résumé serveur comme « déjà vu ». Appelé après chaque lecture complète de
-   * l'état — dont le tout premier chargement : sans cet amorçage, le marqueur partirait
-   * de 0, le premier sondage verrait forcément une différence et rapatrierait les 3,4 Mo
-   * de `/api/state` pour rien.
-   */
-  const marquerVu = useCallback(async () => {
+  /** Lit le résumé de synchro, réduit en clef ; `undefined` si le serveur est injoignable. */
+  const lireResume = useCallback(async (): Promise<number | undefined> => {
     try {
       const { stamp, livreurs: n } = await api.getSync()
-      dernierStamp.current = clefSync(stamp, n)
-    } catch { /* hors-ligne : au pire un sondage rechargera une fois pour rien */ }
+      return clefSync(stamp, n)
+    } catch { return undefined }
   }, [])
 
-  /** Relit tout l'état serveur et l'adopte tel quel (il fait foi). */
-  const recharger = useCallback(async () => {
+  /**
+   * Relit tout l'état serveur et l'adopte — sauf si une écriture est partie pendant la
+   * lecture. `/api/state` pèse 3,4 Mo et met plusieurs secondes : une modification faite
+   * pendant ce temps n'est pas forcément dans la réponse, et l'adopter l'effacerait de
+   * l'écran alors qu'elle est bel et bien enregistrée, sans que rien ne la ramène.
+   * Renvoie `true` si l'état a été adopté.
+   */
+  const relire = useCallback(async (): Promise<boolean> => {
+    const jeton = ecrituresLancees.current
     const s = await api.getState()
+    if (ecrituresLancees.current !== jeton || enVol.current > 0) return false
     setLivreursRaw(s.livreurs); setTournees(s.tournees); setAdresses(s.adresses)
-    await marquerVu()
-  }, [marquerVu])
+    adopterVersions(s.tournees)
+    return true
+  }, [adopterVersions])
 
-  // chargement initial, puis amorçage du marqueur de sondage
+  const recharger = useCallback(async () => { await relire() }, [relire])
+
+  // Chargement initial. Le résumé est lu AVANT l'état : le marqueur ne doit jamais être
+  // plus récent que l'état qu'il marque, sinon un changement arrivé pendant le chargement
+  // serait tenu pour déjà vu et n'apparaîtrait jamais. Sans cet amorçage, à l'inverse, le
+  // marqueur partirait de 0 et le premier sondage rapatrierait les 3,4 Mo pour rien.
   useEffect(() => {
     let alive = true
-    api.getState()
-      .then(async (s) => {
+    void (async () => {
+      const clef = await lireResume()
+      try {
+        const s = await api.getState()
         if (!alive) return
         setLivreursRaw(s.livreurs); setTournees(s.tournees); setAdresses(s.adresses)
-        await marquerVu()
-      })
-      .catch(() => { if (alive) setError('Chargement impossible. Vérifiez votre connexion et rechargez.') })
-      .finally(() => { if (alive) setLoading(false) })
+        adopterVersions(s.tournees)
+        if (clef !== undefined) dernierStamp.current = clef
+      } catch {
+        if (alive) setError('Chargement impossible. Vérifiez votre connexion et rechargez.')
+      } finally {
+        if (alive) setLoading(false)
+      }
+    })()
     return () => { alive = false }
-  }, [marquerVu])
+  }, [lireResume, adopterVersions])
 
   /**
    * Sonde le résumé (quelques octets) plutôt que l'état complet (3,4 Mo), et ne recharge
-   * que si le serveur a effectivement bougé. Le marqueur est posé avant le rechargement :
-   * un second sondage déclenché entre-temps ne relance pas une deuxième lecture complète.
+   * que si le serveur a effectivement bougé. Le marqueur est posé avant la lecture — il ne
+   * doit jamais être plus récent qu'elle — et repris si la lecture échoue ou n'est pas
+   * adoptée : un rechargement raté qui laisserait le changement marqué « vu » le rendrait
+   * invisible pour de bon. Un rechargement en trop coûte de la bande passante ; un
+   * changement manqué est une perte.
    */
   const sonder = useCallback(async () => {
     if (enVol.current > 0 || document.visibilityState !== 'visible') return
+    const clef = await lireResume()
+    if (clef === undefined || clef === dernierStamp.current) return
+    if (enVol.current > 0) return // une écriture est partie pendant le sondage
+    const precedent = dernierStamp.current
+    dernierStamp.current = clef // un second sondage ne relance pas la même lecture
+    let adopte = false
     try {
-      const { stamp, livreurs: n } = await api.getSync()
-      const clef = clefSync(stamp, n)
-      if (clef === dernierStamp.current) return
-      // Une écriture a pu partir pendant le sondage : on laisse le marqueur intact (donc
-      // ce changement sera revu au prochain tour) plutôt que d'écraser une mise à jour
-      // optimiste encore en vol avec un état serveur qui la précède.
-      if (enVol.current > 0) return
-      dernierStamp.current = clef
-      await recharger()
-    } catch { /* hors-ligne : on retentera au prochain tour */ }
-  }, [recharger])
+      adopte = await relire()
+    } catch { /* hors-ligne : on retentera au prochain tour */ } finally {
+      if (!adopte && dernierStamp.current === clef) dernierStamp.current = precedent
+    }
+  }, [lireResume, relire])
 
   useEffect(() => {
     const onVisible = () => { void sonder() }
@@ -206,16 +244,44 @@ export function LivreurProvider({ children }: { children: ReactNode }) {
   }, [recharger])
 
   /**
-   * Écriture d'une tournée. Elle porte la version détenue localement — c'est elle qui arme
-   * le verrou optimiste : sans version, le serveur écrit sans contrôle et le travail de
-   * l'autre poste peut être écrasé en silence. La version renvoyée remplace aussitôt celle
-   * de l'état, sinon l'écriture suivante repartirait d'une version périmée et se
-   * refuserait elle-même.
+   * Écriture d'une tournée. Elle porte la version détenue — c'est elle qui arme le verrou
+   * optimiste : sans version, le serveur écrit sans contrôle et le travail de l'autre poste
+   * peut être écrasé en silence. Cette version est lue dans `versions` à l'instant de
+   * l'envoi, et l'écriture attend celle qui la précède sur la même tournée : partir avec
+   * une version d'avant une écriture à nous provoquerait un 409 qui accuserait l'autre
+   * poste à tort, annulerait le travail de l'utilisateur et déclencherait un rechargement.
+   * La version renvoyée est rangée aussitôt, pour l'écriture suivante.
    */
-  const ecrireTournee = useCallback(async (id: string, patch: PatchTournee, version?: number) => {
-    const rendue = await ecrire(() => api.updateTournee(id, { ...patch, version }))
-    setTournees((p) => p.map((t) => (t.id === id ? { ...t, version: rendue.version } : t)))
+  const ecrireTournee = useCallback(async (id: string, patch: PatchTournee) => {
+    const precedente = filesEcriture.current.get(id)
+    const envoi = (async () => {
+      if (precedente) await precedente // son échec est déjà neutralisé (cf. ci-dessous)
+      const rendue = await ecrire(() => api.updateTournee(id, { ...patch, version: versions.current.get(id) }))
+      versions.current.set(id, rendue.version)
+      setTournees((p) => p.map((t) => (t.id === id ? { ...t, version: rendue.version } : t)))
+    })()
+    // La file ne retient qu'un jalon d'ordre : un échec y est neutralisé pour ne pas
+    // entraîner l'écriture suivante, qui a son propre `catch` chez son appelant.
+    filesEcriture.current.set(id, envoi.catch(() => {}))
+    await envoi
   }, [ecrire])
+
+  /**
+   * Annule la mise à jour optimiste d'UNE tournée, à sa place d'origine. On ne restaure
+   * pas le tableau entier : les autres tournées ont pu voir leur version rafraîchie par
+   * une écriture voisine réussie, et la repousser armerait là-bas le faux conflit qu'on
+   * vient d'éviter ici.
+   */
+  const annuler = useCallback((id: string, prev: Tournee[]) => {
+    const i = prev.findIndex((t) => t.id === id)
+    setTournees((p) => {
+      const autres = p.filter((t) => t.id !== id)
+      if (i < 0) return autres // elle n'existait pas avant l'écriture ratée
+      const avant: Tournee = { ...prev[i], version: versions.current.get(id) ?? prev[i].version }
+      autres.splice(Math.min(i, autres.length), 0, avant)
+      return autres
+    })
+  }, [])
 
   const restaurer = useCallback(async (id: string, type: 'tournee' | 'livreur') => {
     try {
@@ -259,6 +325,7 @@ export function LivreurProvider({ children }: { children: ReactNode }) {
   const addTournee = useCallback(async (input: { livreurId: string; date: string }) => {
     try {
       const created = await ecrire(() => api.createTournee(input))
+      if (created.version !== undefined) versions.current.set(created.id, created.version)
       setTournees((p) => [...p, created])
       return created.id
     } catch (e) { fail(e); return '' }
@@ -270,6 +337,8 @@ export function LivreurProvider({ children }: { children: ReactNode }) {
     if (!src) return ''
     try {
       const created = await ecrire(() => api.createTournee({ livreurId, date: src.date }))
+      // La copie vient de naître : sa version est celle que le serveur vient de donner.
+      if (created.version !== undefined) versions.current.set(created.id, created.version)
       const stops = src.stops.map((s) => ({ ...s, id: makeStopId() }))
       const route = src.route
       const heures = {
@@ -278,8 +347,7 @@ export function LivreurProvider({ children }: { children: ReactNode }) {
         ordreManuel: src.ordreManuel,
       }
       setTournees((p) => [...p, { ...created, stops, route, ...heures }])
-      // La copie vient de naître : sa version est celle que le serveur vient de donner.
-      await ecrireTournee(created.id, { stops, route: route ?? null, ...heures }, created.version)
+      await ecrireTournee(created.id, { stops, route: route ?? null, ...heures })
       return created.id
     } catch (e) { fail(e); return '' }
   }, [tournees, ecrire, ecrireTournee, fail])
@@ -288,39 +356,52 @@ export function LivreurProvider({ children }: { children: ReactNode }) {
     const prev = tournees
     setTournees((p) => p.map((t) => (t.id === id ? { ...t, ...patch } : t)))
     try {
-      await ecrireTournee(id, patch, prev.find((t) => t.id === id)?.version)
-    } catch (e) { setTournees(prev); fail(e) }
-  }, [tournees, ecrireTournee, fail])
+      await ecrireTournee(id, patch)
+    } catch (e) { annuler(id, prev); fail(e) }
+  }, [tournees, ecrireTournee, annuler, fail])
 
   const removeTournee = useCallback(async (id: string) => {
     const prev = tournees
     setTournees((p) => p.filter((t) => t.id !== id))
-    try { await ecrire(() => api.deleteTournee(id)) } catch (e) { setTournees(prev); fail(e) }
-  }, [tournees, ecrire, fail])
+    try { await ecrire(() => api.deleteTournee(id)) } catch (e) { annuler(id, prev); fail(e) }
+  }, [tournees, ecrire, annuler, fail])
 
   // Persiste stops + route (+ champs annexes) d'une tournée donnée.
   const persistStops = useCallback(
     async (id: string, stops: Stop[], route: Tournee['route'], prev: Tournee[], extra?: TourneeExtra) => {
       try {
-        // `prev` est l'état d'avant la mise à jour optimiste : c'est là que vit la
-        // version réellement détenue (une mise à jour optimiste n'en invente pas).
-        await ecrireTournee(id, { stops, route: route ?? null, ...extra }, prev.find((x) => x.id === id)?.version)
-      } catch (e) { setTournees(prev); fail(e) }
+        await ecrireTournee(id, { stops, route: route ?? null, ...extra })
+      } catch (e) { annuler(id, prev); fail(e) }
     },
-    [ecrireTournee, fail],
+    [ecrireTournee, annuler, fail],
   )
 
   // Applique un nouvel ordre d'arrêts : maj optimiste, recalcul du trajet, persistance.
   const recompute = useCallback(
     async (tourneeId: string, stops: Stop[], prev: Tournee[], extra?: TourneeExtra) => {
-      setTournees((p) => p.map((x) => (x.id === tourneeId ? { ...x, ...extra, stops, route: undefined } : x)))
-      const route = await computeRoute(stops, modeOf(prev.find((x) => x.id === tourneeId), extra))
-      setTournees((p) => p.map((x) => (x.id === tourneeId ? { ...x, route } : x)))
+      // La mise à jour optimiste ci-dessous précède l'appel réseau (`ecrire`, dans
+      // `ecrireTournee`) de plusieurs secondes — le temps que `computeRoute` réponde.
+      // `enVol` doit donc être levé dès ici, pas seulement pendant l'appel réseau : sinon
+      // `relire()`, qui ne regarde `enVol` qu'une fois sa propre lecture terminée, ne
+      // verrait rien en cours pendant cette fenêtre et effacerait une modification pas
+      // encore envoyée. `ecrituresLancees` couvre le cas complémentaire (l'édition démarre
+      // *et* se termine pendant la lecture de `relire`) ; les deux compteurs sont
+      // nécessaires, l'un pour « en cours maintenant », l'autre pour « un événement a eu
+      // lieu pendant l'attente ».
+      enVol.current++
+      ecrituresLancees.current++
       try {
-        await ecrireTournee(tourneeId, { stops, route, ...extra }, prev.find((x) => x.id === tourneeId)?.version)
-      } catch (e) { setTournees(prev); fail(e) }
+        setTournees((p) => p.map((x) => (x.id === tourneeId ? { ...x, ...extra, stops, route: undefined } : x)))
+        const route = await computeRoute(stops, modeOf(prev.find((x) => x.id === tourneeId), extra))
+        setTournees((p) => p.map((x) => (x.id === tourneeId ? { ...x, route } : x)))
+        try {
+          await ecrireTournee(tourneeId, { stops, route, ...extra })
+        } catch (e) { annuler(tourneeId, prev); fail(e) }
+      } finally {
+        enVol.current--
+      }
     },
-    [ecrireTournee, fail],
+    [ecrireTournee, annuler, fail],
   )
 
   const addStopToTournee = useCallback(async (tourneeId: string, s: Suggestion) => {
@@ -383,10 +464,10 @@ export function LivreurProvider({ children }: { children: ReactNode }) {
       if (patch.retourHeure !== undefined) norm.retourHeure = patch.retourHeure || undefined
       setTournees((p) => p.map((x) => (x.id === tourneeId ? { ...x, ...norm } : x)))
       try {
-        await ecrireTournee(tourneeId, norm, prev.find((x) => x.id === tourneeId)?.version)
-      } catch (e) { setTournees(prev); fail(e) }
+        await ecrireTournee(tourneeId, norm)
+      } catch (e) { annuler(tourneeId, prev); fail(e) }
     },
-    [tournees, ecrireTournee, fail],
+    [tournees, ecrireTournee, annuler, fail],
   )
 
   // Rebascule en tri chronologique automatique (annule l'ordre manuel).

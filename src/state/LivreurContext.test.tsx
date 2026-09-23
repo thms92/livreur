@@ -39,7 +39,9 @@ vi.mock('../services/api', async () => {
 })
 
 import { api, ConflitError } from '../services/api'
+import type { AppState } from '../services/api'
 import { computeRoute, optimizeTrip } from '../services/routing'
+import type { RouteResult } from '../types'
 
 const wrapper = ({ children }: { children: ReactNode }) => <LivreurProvider>{children}</LivreurProvider>
 
@@ -249,6 +251,108 @@ describe('LivreurContext — travail à deux', () => {
     // L’écriture suivante repart de la version rendue, sinon elle se heurterait au verrou.
     await act(async () => { await result.current.setTourneeHeure(tid, { departHeure: '08:00' }) })
     expect(vi.mocked(api.updateTournee).mock.calls.at(-1)?.[1]).toMatchObject({ version: 7 })
+  })
+
+  it('le marqueur n’est jamais plus récent que l’état qu’il marque', async () => {
+    await ready()
+
+    // Le résumé est lu AVANT l’état : un changement qui arriverait pendant la lecture des
+    // 3,4 Mo serait sinon marqué « vu » sans avoir jamais été reçu, donc invisible.
+    expect(vi.mocked(api.getSync).mock.invocationCallOrder[0])
+      .toBeLessThan(vi.mocked(api.getState).mock.invocationCallOrder[0])
+  })
+
+  it('le sondage n’adopte pas un état antérieur à une écriture faite pendant la lecture', async () => {
+    const { result, tid, livreurId } = await tourneeNeuve()
+    let repondreEtat: ((s: AppState) => void) | undefined
+    vi.mocked(api.getState).mockImplementationOnce(() => new Promise<AppState>((r) => { repondreEtat = r }))
+    vi.mocked(api.getSync).mockResolvedValueOnce({ stamp: 999, livreurs: 0 })
+
+    document.dispatchEvent(new Event('visibilitychange'))
+    await waitFor(() => expect(repondreEtat).toBeDefined()) // la lecture des 3,4 Mo est en vol
+
+    // L’utilisateur modifie pendant cette lecture, et son écriture aboutit.
+    await act(async () => { await result.current.setTourneeHeure(tid, { departHeure: '08:00' }) })
+    // Le serveur répond enfin — avec un état d’avant cette modification.
+    await act(async () => {
+      repondreEtat?.({
+        livreurs: [],
+        tournees: [{ id: tid, livreurId, date: '2026-09-22', stops: [], version: 1 }],
+        adresses: [],
+      })
+    })
+
+    // Sa modification est enregistrée côté serveur : elle doit rester à l’écran.
+    expect(result.current.tournees[0].departHeure).toBe('08:00')
+
+    // Et le changement serveur, lui, n’a pas été reçu : il ne doit pas rester marqué « vu ».
+    vi.mocked(api.getSync).mockResolvedValueOnce({ stamp: 999, livreurs: 0 })
+    vi.mocked(api.getState).mockClear()
+    document.dispatchEvent(new Event('visibilitychange'))
+    await waitFor(() => expect(api.getState).toHaveBeenCalled())
+  })
+
+  it('recharger n’adopte pas un état antérieur à une modification optimiste dont l’écriture n’est pas encore partie (fenêtre computeRoute)', async () => {
+    const { result, tid, livreurId } = await tourneeNeuve()
+    let resoudreRoute: ((r: RouteResult) => void) | undefined
+    vi.mocked(computeRoute).mockImplementationOnce(
+      () => new Promise((r) => { resoudreRoute = r }),
+    )
+
+    // L’ajout d’un arrêt applique la mise à jour optimiste des `stops` puis attend
+    // `computeRoute` avant d’envoyer quoi que ce soit au serveur : aucune écriture n’est
+    // en vol pendant cette fenêtre, et c’est précisément elle que `recharger` doit respecter.
+    let ajout: Promise<void> | undefined
+    await act(async () => {
+      ajout = result.current.addStopToTournee(tid, { id: 'ban-1', label: 'A', ville: 'V', lat: 48, lng: 1 })
+    })
+    await waitFor(() => expect(resoudreRoute).toBeDefined())
+    expect(result.current.tournees[0].stops).toHaveLength(1)
+
+    // Le serveur répond à `recharger` avec un état d’avant cet ajout.
+    vi.mocked(api.getState).mockResolvedValueOnce({
+      livreurs: [],
+      tournees: [{ id: tid, livreurId, date: '2026-09-22', stops: [], version: 1 }],
+      adresses: [],
+    })
+    await act(async () => { await result.current.recharger() })
+
+    // L’ajout local, pas encore envoyé, doit rester à l’écran.
+    expect(result.current.tournees[0].stops).toHaveLength(1)
+
+    await act(async () => {
+      resoudreRoute?.({ km: 5, min: 8, geometry: [], optimized: false, approximate: false })
+      await ajout
+    })
+  })
+
+  it('une seconde écriture pendant la première ne se heurte pas à elle-même', async () => {
+    const { result, tid } = await tourneeNeuve()
+    let repondre: ((r: { ok: true; version: number }) => void) | undefined
+    vi.mocked(api.updateTournee).mockImplementationOnce(
+      () => new Promise<{ ok: true; version: number }>((r) => { repondre = r }),
+    )
+
+    let premiere: Promise<void> | undefined
+    await act(async () => { premiere = result.current.setTourneeHeure(tid, { departHeure: '08:00' }) })
+    await waitFor(() => expect(repondre).toBeDefined())
+
+    let seconde: Promise<void> | undefined
+    await act(async () => { seconde = result.current.updateTournee(tid, { date: '2026-09-23' }) })
+    // Elle attend son tour : partir maintenant, ce serait partir avec la version d’avant.
+    expect(api.updateTournee).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      repondre?.({ ok: true, version: 2 })
+      await premiere
+      await seconde
+    })
+
+    // Elle est partie avec la version rapportée par la première : pas de 409 contre soi-même.
+    expect(vi.mocked(api.updateTournee).mock.calls[1][1]).toMatchObject({ version: 2 })
+    expect(result.current.error).toBeNull()
+    expect(result.current.tournees[0].date).toBe('2026-09-23')
+    expect(result.current.tournees[0].departHeure).toBe('08:00')
   })
 
   it('restaurer remet l’élément puis relit l’état', async () => {
