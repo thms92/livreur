@@ -48,7 +48,10 @@ export interface LivreurState {
   section: Section
   loading: boolean
   error: string | null
+  /** Livreurs actifs : les listes et les sélecteurs d'affectation ne voient que ceux-là. */
   livreurs: LivreurWithColor[]
+  /** Tous les livreurs, corbeille comprise : sert à nommer le livreur d'une tournée. */
+  livreursTous: LivreurWithColor[]
   tournees: Tournee[]
   adresses: Suggestion[]
   provider: AddressProvider
@@ -216,9 +219,15 @@ export function LivreurProvider({ children }: { children: ReactNode }) {
     }
   }, [sonder])
 
-  const livreurs = useMemo<LivreurWithColor[]>(
+  // Deux vues : les actifs pilotent les listes et l'affectation ; la liste complète
+  // sert à résoudre le nom d'un livreur sur une tournée ancienne, même après son retrait.
+  const livreursTous = useMemo<LivreurWithColor[]>(
     () => livreursRaw.map((l) => ({ ...l, couleur: driverColor(l.colorIndex) })),
     [livreursRaw],
+  )
+  const livreurs = useMemo<LivreurWithColor[]>(
+    () => livreursTous.filter((l) => !l.deletedAt),
+    [livreursTous],
   )
 
   const toggleTheme = useCallback(() => setTheme((t) => (t === 'light' ? 'dark' : 'light')), [setTheme])
@@ -514,7 +523,8 @@ export function LivreurProvider({ children }: { children: ReactNode }) {
   }, [adresses, ecrire, fail])
 
   const value: LivreurState = {
-    theme, section, loading, error, livreurs, tournees, adresses, provider: defaultProvider,
+    theme, section, loading, error, livreurs, livreursTous, tournees, adresses,
+    provider: defaultProvider,
     reduceMotion: !!reduceMotion, toggleTheme, setSection, dismissError,
     addLivreur, updateLivreur, removeLivreur,
     addTournee, duplicateTournee, updateTournee, removeTournee,

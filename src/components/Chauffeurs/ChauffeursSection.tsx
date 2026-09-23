@@ -23,7 +23,9 @@ function pickDefault(dates: string[]): string {
 }
 
 export function ChauffeursSection() {
-  const { livreurs, tournees } = useLivreur()
+  // Les cartes ne montrent que les livreurs actifs ; la liste complète sert uniquement
+  // à retrouver la couleur du tracé d'une tournée dont le livreur est parti.
+  const { livreurs, livreursTous, tournees } = useLivreur()
 
   // dates distinctes ayant au moins une tournée, triées
   const availableDates = useMemo(
@@ -73,7 +75,7 @@ export function ChauffeursSection() {
         <TourneeMap
           tournees={ofDay.map((t) => ({
             id: t.id,
-            couleur: livreurs.find((l) => l.id === t.livreurId)?.couleur ?? 'var(--c-1)',
+            couleur: livreursTous.find((l) => l.id === t.livreurId)?.couleur ?? 'var(--c-1)',
             stops: t.stops,
             route: t.route,
           }))}

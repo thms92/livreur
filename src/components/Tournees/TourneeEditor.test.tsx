@@ -22,9 +22,17 @@ const tournee: Tournee = {
   sansPeage: true,
 }
 
+const actif = { id: 'l1', nom: 'B', prenom: 'K', telephone: '', colorIndex: 0, couleur: 'var(--c-1)' }
+// Livreur mis à la corbeille : il ne doit plus être proposé à l'affectation.
+const supprime = {
+  id: 'l9', nom: 'PARTI', prenom: 'P', telephone: '', colorIndex: 1,
+  couleur: 'var(--c-2)', deletedAt: 1758500000000,
+}
+
 vi.mock('../../state/LivreurContext', () => ({
   useLivreur: () => ({
-    livreurs: [{ id: 'l1', nom: 'B', prenom: 'K', telephone: '', colorIndex: 0, couleur: 'var(--c-1)' }],
+    livreurs: [actif],
+    livreursTous: [actif, supprime],
     tournees: [{ ...tournee, ...override }],
     provider: { search: async () => [] },
     adresses: [],
@@ -62,5 +70,14 @@ describe('TourneeEditor — option péage', () => {
     override = { sansPeage: undefined }
     render(<TourneeEditor tourneeId="t1" onClose={() => {}} />)
     expect(screen.getByRole('checkbox', { name: /sans péage/i })).toBeChecked()
+  })
+})
+
+describe('TourneeEditor — affectation', () => {
+  it('n’offre que les livreurs actifs dans le sélecteur', () => {
+    override = {}
+    render(<TourneeEditor tourneeId="t1" onClose={() => {}} />)
+    expect(screen.getByRole('option', { name: 'K B' })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'P PARTI' })).not.toBeInTheDocument()
   })
 })

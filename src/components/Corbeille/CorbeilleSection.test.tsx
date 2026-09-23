@@ -17,8 +17,16 @@ vi.mock('../../services/api', () => ({
   },
 }))
 
+// Le livreur de la tournée supprimée est lui-même à la corbeille : il a quitté les
+// actifs, et l'écran fait pour restaurer est le dernier où son nom doit rester lisible.
 vi.mock('../../state/LivreurContext', () => ({
-  useLivreur: () => ({ restaurer, livreurs: [{ id: 'l1', nom: 'MACE', prenom: 'Julian', couleur: 'var(--c-1)' }] }),
+  useLivreur: () => ({
+    restaurer,
+    livreurs: [],
+    livreursTous: [{
+      id: 'l1', nom: 'MACE', prenom: 'Julian', couleur: 'var(--c-1)', deletedAt: 1758500000000,
+    }],
+  }),
 }))
 
 describe('CorbeilleSection', () => {
@@ -39,5 +47,10 @@ describe('CorbeilleSection', () => {
     vi.mocked(api.getCorbeille).mockResolvedValueOnce({ tournees: [], livreurs: [] })
     render(<CorbeilleSection />)
     expect(await screen.findByText(/corbeille est vide/i)).toBeInTheDocument()
+  })
+
+  it('nomme le livreur d’une tournée même s’il est lui aussi à la corbeille', async () => {
+    render(<CorbeilleSection />)
+    expect(await screen.findByText('Julian MACE')).toBeInTheDocument()
   })
 })

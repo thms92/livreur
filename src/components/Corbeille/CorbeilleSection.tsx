@@ -6,7 +6,9 @@ import type { Livreur, Tournee } from '../../types'
 const dateFr = (ms: number) => new Date(ms).toLocaleString('fr-FR')
 
 export function CorbeilleSection() {
-  const { restaurer, livreurs } = useLivreur()
+  // Liste complète : le livreur d'une tournée supprimée est souvent supprimé lui aussi,
+  // et c'est justement ici, avant de restaurer, qu'il faut pouvoir le nommer.
+  const { restaurer, livreursTous } = useLivreur()
   const [contenu, setContenu] = useState<{ tournees: Tournee[]; livreurs: Livreur[] } | null>(null)
 
   const charger = useCallback(() => { void api.getCorbeille().then(setContenu) }, [])
@@ -27,7 +29,7 @@ export function CorbeilleSection() {
       {vide && <p className="empty">La corbeille est vide.</p>}
       <ul className="tournee-list">
         {contenu.tournees.map((t) => {
-          const l = livreurs.find((x) => x.id === t.livreurId)
+          const l = livreursTous.find((x) => x.id === t.livreurId)
           return (
             <li key={t.id} className="tournee-row">
               <span className="tournee-date">{t.date}</span>

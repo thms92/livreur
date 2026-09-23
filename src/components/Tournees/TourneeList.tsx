@@ -8,7 +8,8 @@ interface Props {
 }
 
 export function TourneeList({ onOpen, onDuplicate }: Props) {
-  const { tournees, livreurs, removeTournee } = useLivreur()
+  // Liste complète : une tournée reste nommée même si son livreur est à la corbeille.
+  const { tournees, livreursTous, removeTournee } = useLivreur()
 
   const upcoming = partitionTournees(tournees).upcoming
   if (!upcoming.length) return <p className="empty">Aucune tournée à venir. Créez-en une.</p>
@@ -18,7 +19,7 @@ export function TourneeList({ onOpen, onDuplicate }: Props) {
   return (
     <ul className="tournee-list">
       {sorted.map((t) => {
-        const l = livreurs.find((x) => x.id === t.livreurId)
+        const l = livreursTous.find((x) => x.id === t.livreurId)
         return (
           <li key={t.id} className="tournee-row" style={{ borderLeftColor: l?.couleur }}>
             <span className="tournee-date">{t.date}</span>

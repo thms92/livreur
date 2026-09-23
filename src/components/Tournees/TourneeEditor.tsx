@@ -13,6 +13,7 @@ interface Props {
 export function TourneeEditor({ tourneeId, onClose }: Props) {
   const {
     livreurs,
+    livreursTous,
     tournees,
     provider,
     adresses,
@@ -29,7 +30,10 @@ export function TourneeEditor({ tourneeId, onClose }: Props) {
   } = useLivreur()
 
   const tournee = tournees.find((t) => t.id === tourneeId)
-  const livreur = livreurs.find((l) => l.id === tournee?.livreurId)
+  // Résolution sur la liste complète : la fiche et la carte doivent rester justes même
+  // si le livreur affecté a depuis été mis à la corbeille. Le sélecteur, lui, n'offre
+  // que les actifs — on ne réaffecte pas une tournée à quelqu'un qui n'est plus là.
+  const livreur = livreursTous.find((l) => l.id === tournee?.livreurId)
 
   if (!tournee) return null
 

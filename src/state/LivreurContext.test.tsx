@@ -364,4 +364,19 @@ describe('LivreurContext — travail à deux', () => {
     expect(api.restore).toHaveBeenCalledWith('T1', 'tournee')
     expect(vi.mocked(api.getState).mock.calls.length).toBeGreaterThan(appelsAvant)
   })
+
+  it('un livreur supprimé sort des listes mais reste résoluble par son nom', async () => {
+    vi.mocked(api.getState).mockResolvedValueOnce({
+      livreurs: [
+        { id: 'l1', nom: 'ACTIF', prenom: 'A', telephone: '', colorIndex: 0 },
+        { id: 'l2', nom: 'PARTI', prenom: 'P', telephone: '', colorIndex: 1, deletedAt: 1758500000000 },
+      ],
+      tournees: [],
+      adresses: [],
+    })
+    const { result } = await ready()
+
+    expect(result.current.livreurs.map((l) => l.nom)).toEqual(['ACTIF'])
+    expect(result.current.livreursTous.map((l) => l.nom)).toEqual(['ACTIF', 'PARTI'])
+  })
 })

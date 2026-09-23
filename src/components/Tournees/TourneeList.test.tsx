@@ -18,13 +18,21 @@ const tournees: Tournee[] = [
   },
 ]
 
+const actifs = [
+  { id: 'l1', nom: 'MACE', prenom: 'Julian', telephone: '', colorIndex: 0, couleur: 'var(--c-1)' },
+]
+// Maxime LAGNEAU est parti à la corbeille : il ne figure plus parmi les actifs et
+// n'est plus nommable que par la liste complète.
+const supprime = {
+  id: 'l2', nom: 'LAGNEAU', prenom: 'Maxime', telephone: '', colorIndex: 1,
+  couleur: 'var(--c-2)', deletedAt: 1758500000000,
+}
+
 vi.mock('../../state/LivreurContext', () => ({
   useLivreur: () => ({
     tournees,
-    livreurs: [
-      { id: 'l1', nom: 'MACE', prenom: 'Julian', telephone: '', colorIndex: 0, couleur: 'var(--c-1)' },
-      { id: 'l2', nom: 'LAGNEAU', prenom: 'Maxime', telephone: '', colorIndex: 1, couleur: 'var(--c-2)' },
-    ],
+    livreurs: actifs,
+    livreursTous: [...actifs, supprime],
     removeTournee: vi.fn(),
   }),
 }))
@@ -42,5 +50,13 @@ describe('TourneeList — mode péage', () => {
     const ligne = screen.getAllByRole('listitem')[0]
     expect(within(ligne).getByText(/173 km/)).toBeInTheDocument()
     expect(within(ligne).getByText(/2 h 41/)).toBeInTheDocument()
+  })
+})
+
+describe('TourneeList — livreur mis à la corbeille', () => {
+  it('nomme encore le livreur d’une tournée dont le livreur a été supprimé', () => {
+    render(<TourneeList onOpen={() => {}} onDuplicate={() => {}} />)
+    const ligne = screen.getAllByRole('listitem')[1]
+    expect(within(ligne).getByText('Maxime LAGNEAU')).toBeInTheDocument()
   })
 })

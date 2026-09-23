@@ -3,7 +3,8 @@ import { formatDuree, partitionTournees } from '../../lib/tourneeTime'
 import { printTourneeSheet } from '../../services/printSheet'
 
 export function HistoriqueSection() {
-  const { tournees, livreurs } = useLivreur()
+  // Liste complète : une tournée passée doit rester nommée, même si son livreur est parti.
+  const { tournees, livreursTous } = useLivreur()
   const past = partitionTournees(tournees).past.sort((a, b) => b.date.localeCompare(a.date))
 
   if (!past.length) {
@@ -20,7 +21,7 @@ export function HistoriqueSection() {
       <h1>Historique</h1>
       <ul className="tournee-list">
         {past.map((t) => {
-          const l = livreurs.find((x) => x.id === t.livreurId)
+          const l = livreursTous.find((x) => x.id === t.livreurId)
           return (
             <li key={t.id} className="tournee-row" style={{ borderLeftColor: l?.couleur }}>
               <span className="tournee-date">{t.date}</span>
