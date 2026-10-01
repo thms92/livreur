@@ -16,13 +16,19 @@ const PTS_A: [number, number][] = [
 ]
 
 /** Mocke fetch et retient les corps de requête envoyés, pour vérifier le mode demandé. */
-function mockValhalla(json: unknown, ok = true) {
+function mockValhalla(
+  json: unknown,
+  ok = true,
+  parUrl?: (url: string, body: Record<string, unknown>) => unknown,
+) {
   const bodies: unknown[] = []
   const urls: string[] = []
   const f = vi.fn().mockImplementation((url: string, init?: { body?: string }) => {
     urls.push(url)
-    if (init?.body) bodies.push(JSON.parse(init.body))
-    return Promise.resolve({ ok, json: () => Promise.resolve(json) })
+    const corps = init?.body ? (JSON.parse(init.body) as Record<string, unknown>) : {}
+    if (init?.body) bodies.push(corps)
+    const charge = parUrl ? parUrl(url, corps) : json
+    return Promise.resolve({ ok, json: () => Promise.resolve(charge) })
   })
   vi.stubGlobal('fetch', f)
   return { bodies, urls, f }
@@ -213,5 +219,45 @@ describe('limite de 10 points de l’instance Valhalla', () => {
     const { order } = await optimizeTrip(douze.slice(0, 2))
     expect(urls.some((u) => u.includes('optimized_route'))).toBe(true)
     expect(order).toEqual([1, 0])
+  })
+
+  it('au-delà de la limite, optimise via la matrice au lieu de renoncer', async () => {
+    // 12 arrêts => 14 points : /optimized_route refuserait. On doit passer par
+    // /sources_to_targets puis réordonner, et NON conserver l'ordre donné.
+    const { urls } = mockValhalla(null, true, (url: string, body: Record<string, unknown>) => {
+      if (url.includes('sources_to_targets')) {
+        const s = (body.sources as unknown[]).length
+        const t = (body.targets as unknown[]).length
+        // Coût = distance sur une ligne, arrêt i placé en (12 - i) : l'ordre
+        // optimal est donc l'inverse de l'ordre donné.
+        const pos = (k: number) => (k === 0 || k === 13 ? 0 : 13 - k)
+        return {
+          sources_to_targets: Array.from({ length: s }, (_, i) =>
+            Array.from({ length: t }, (_, j) => ({ time: Math.abs(pos(i) - pos(j)) })),
+          ),
+        }
+      }
+      return tripRoute([SHAPE_A])
+    })
+
+    const { order, route } = await optimizeTrip(douze)
+
+    expect(urls.some((u) => u.includes('sources_to_targets'))).toBe(true)
+    expect(urls.every((u) => !u.includes('optimized_route'))).toBe(true)
+    expect(order).not.toEqual(douze.map((_, i) => i)) // il a VRAIMENT réordonné
+    expect([...order].sort((a, b) => a - b)).toEqual(douze.map((_, i) => i))
+    expect(route.optimized).toBe(true)
+    expect(route.approximate).toBe(false)
+  })
+
+  it('si la matrice échoue, on garde l’ordre donné mais un vrai tracé', async () => {
+    const { urls } = mockValhalla(null, true, (url: string) => {
+      if (url.includes('sources_to_targets')) throw new Error('matrice indisponible')
+      return tripRoute([SHAPE_A])
+    })
+    const { order, route } = await optimizeTrip(douze)
+    expect(order).toEqual(douze.map((_, i) => i))
+    expect(route.approximate).toBe(false) // le tracé par tronçons reste bon
+    expect(urls.some((u) => u.includes('/route'))).toBe(true)
   })
 })

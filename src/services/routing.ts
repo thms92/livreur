@@ -2,6 +2,8 @@ import type { LatLng, RouteResult, Stop } from '../types'
 import { DEPOT } from '../data/depot'
 import { routeLengthKm } from './geo'
 import { decodePolyline6 } from './polyline'
+import { matriceDurees } from './matrice'
+import { ordreOptimise } from '../lib/tsp'
 
 // Valhalla (instance publique FOSSGIS) : contrairement à OSRM, il sait éviter les péages.
 const VALHALLA = 'https://valhalla1.openstreetmap.de'
@@ -92,12 +94,23 @@ export async function optimizeTrip(
 ): Promise<{ order: number[]; route: RouteResult }> {
   if (stops.length === 0) return { order: [], route: emptyRoute(true) }
   const pts = [DEPOT, ...stops, DEPOT]
-  // L'optimisation d'ordre est globale : elle ne se découpe pas en tronçons.
-  // Au-delà de la limite de l'instance, on garde l'ordre donné et on se rabat sur
-  // un calcul d'itinéraire, lui découpable — mieux vaut un vrai tracé non réordonné
-  // qu'un repli à vol d'oiseau.
+  // Au-delà de la limite de /optimized_route, on optimise quand même : l'endpoint
+  // matriciel a un budget bien plus large (100 PAIRES, pas 100 points), donc la
+  // matrice des durées réelles tient en deux ou trois requêtes. On résout l'ordre
+  // localement, puis on calcule le tracé par tronçons.
   if (pts.length > MAX_LOCATIONS) {
-    return { order: stops.map((_, i) => i), route: await computeRoute(stops, opts) }
+    const sansPeage = opts.sansPeage ?? true
+    try {
+      // Le dépôt n'apparaît qu'une fois dans la matrice : le cycle y revient seul.
+      const matrice = await matriceDurees([DEPOT, ...stops], sansPeage)
+      const order = ordreOptimise(matrice).map((i) => i - 1)
+      const ordonnes = order.map((i) => stops[i])
+      const route = await computeRoute(ordonnes, opts)
+      return { order, route: { ...route, optimized: true } }
+    } catch {
+      // Matrice indisponible : l'ordre donné, mais un tracé routier malgré tout.
+      return { order: stops.map((_, i) => i), route: await computeRoute(stops, opts) }
+    }
   }
   try {
     const trip = await askValhalla('/optimized_route', pts, opts.sansPeage ?? true)
