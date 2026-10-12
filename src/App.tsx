@@ -6,6 +6,7 @@ import { ChauffeursSection } from './components/Chauffeurs/ChauffeursSection'
 import { HistoriqueSection } from './components/Historique/HistoriqueSection'
 import { CorbeilleSection } from './components/Corbeille/CorbeilleSection'
 import { OperateurGate } from './components/OperateurGate'
+import { Nouveautes } from './components/Nouveautes'
 
 function Shell() {
   const { section, loading, error, dismissError } = useLivreur()
@@ -36,6 +37,8 @@ export function App() {
   return (
     <OperateurGate>
       <LivreurProvider>
+        {/* Après la porte d'identité : un poste neuf n'enchaîne pas deux fenêtres. */}
+        <Nouveautes />
         <Shell />
       </LivreurProvider>
     </OperateurGate>

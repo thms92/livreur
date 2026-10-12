@@ -263,3 +263,10 @@ button { font-family: inherit; cursor: pointer; }
    la carte imprimée, elle doit donc se voir et se corriger en un clic. */
 .alerte-itineraire { display: flex; align-items: center; gap: 14px; padding: 12px 14px; border-radius: 8px; border: 1px solid #e5484d; background: rgba(229, 72, 77, 0.08); font-size: 13px; }
 .alerte-itineraire button { margin-left: auto; white-space: nowrap; }
+
+/* Annonce des nouveautés, une fois par poste et par version. */
+.nouveautes-fond { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(0, 0, 0, 0.45); }
+.nouveautes { max-width: 540px; max-height: 85vh; overflow: auto; display: flex; flex-direction: column; gap: 14px; padding: 24px 26px; border-radius: 12px; background: var(--surface); color: var(--text); box-shadow: 0 18px 50px rgba(0, 0, 0, 0.3); }
+.nouveautes h2 { margin: 0; font-size: 19px; }
+.nouveautes p { margin: 0; font-size: 14px; line-height: 1.55; }
+.nouveautes button { align-self: flex-end; }
