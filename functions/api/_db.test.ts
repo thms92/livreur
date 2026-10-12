@@ -4,7 +4,7 @@ import { makeTestDb } from '../../src/test/d1'
 import {
   getState, createLivreur, updateLivreur, deleteLivreur,
   createTournee, updateTournee, deleteTournee,
-  upsertAdresse, deleteAdresse,
+  upsertAdresse, deleteAdresse, getGeometrie,
   restoreTournee, restoreLivreur, getCorbeille, getSync,
 } from './_db'
 
@@ -383,5 +383,56 @@ describe('_db — attribution et synchro', () => {
 
     await restoreLivreur(db, a.id)
     expect((await getSync(db)).livreurs).toBe(2)
+  })
+})
+
+describe('_db — allègement de /api/state', () => {
+  const trace: [number, number][] = [[48.1, 1.1], [48.2, 1.2], [48.3, 1.3]]
+
+  it('getState ne renvoie plus les tracés, mais garde km, durée et drapeaux', async () => {
+    const db = makeTestDb()
+    const l = await createLivreur(db, { nom: 'B', prenom: 'K' })
+    const t = await createTournee(db, { livreurId: l.id, date: '2026-10-13' })
+    await updateTournee(db, t.id, {
+      route: { km: 254, min: 397, geometry: trace, optimized: true, approximate: false },
+    })
+
+    const vue = (await getState(db)).tournees[0]
+
+    expect(vue.route?.geometry).toEqual([])
+    expect(vue.route?.km).toBe(254)
+    expect(vue.route?.min).toBe(397)
+    expect(vue.route?.optimized).toBe(true)
+    expect(vue.route?.approximate).toBe(false)
+  })
+
+  it('le tracé reste récupérable à la demande', async () => {
+    const db = makeTestDb()
+    const l = await createLivreur(db, { nom: 'B', prenom: 'K' })
+    const t = await createTournee(db, { livreurId: l.id, date: '2026-10-13' })
+    await updateTournee(db, t.id, {
+      route: { km: 254, min: 397, geometry: trace, optimized: true, approximate: false },
+    })
+
+    expect(await getGeometrie(db, t.id)).toEqual(trace)
+  })
+
+  it('le tracé n’est pas perdu en base : une écriture sans route ne l’efface pas', async () => {
+    const db = makeTestDb()
+    const l = await createLivreur(db, { nom: 'B', prenom: 'K' })
+    const t = await createTournee(db, { livreurId: l.id, date: '2026-10-13' })
+    await updateTournee(db, t.id, {
+      route: { km: 254, min: 397, geometry: trace, optimized: true, approximate: false },
+    })
+    await updateTournee(db, t.id, { date: '2026-10-14' })
+
+    expect(await getGeometrie(db, t.id)).toEqual(trace)
+  })
+
+  it('tournée sans itinéraire -> tracé vide, pas d’erreur', async () => {
+    const db = makeTestDb()
+    const l = await createLivreur(db, { nom: 'B', prenom: 'K' })
+    const t = await createTournee(db, { livreurId: l.id, date: '2026-10-13' })
+    expect(await getGeometrie(db, t.id)).toEqual([])
   })
 })

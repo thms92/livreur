@@ -1,10 +1,9 @@
 import { useLivreur } from '../../state/LivreurContext'
 import { formatDuree, partitionTournees } from '../../lib/tourneeTime'
-import { printTourneeSheet } from '../../services/printSheet'
 
 export function HistoriqueSection() {
   // Liste complète : une tournée passée doit rester nommée, même si son livreur est parti.
-  const { tournees, livreursTous } = useLivreur()
+  const { tournees, livreursTous, imprimerTournee } = useLivreur()
   const past = partitionTournees(tournees).past.sort((a, b) => b.date.localeCompare(a.date))
 
   if (!past.length) {
@@ -30,7 +29,7 @@ export function HistoriqueSection() {
                 {t.stops.length} arrêt(s)
                 {t.route ? ` · ${t.route.km.toFixed(0)} km · ${formatDuree(t.route.min)}` : ''}
               </span>
-              <button className="btn-ghost" style={{ marginLeft: 'auto' }} onClick={() => printTourneeSheet(t, l)}>
+              <button className="btn-ghost" style={{ marginLeft: 'auto' }} onClick={() => void imprimerTournee(t, l)}>
                 Imprimer
               </button>
             </li>

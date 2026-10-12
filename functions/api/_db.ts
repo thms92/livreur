@@ -75,7 +75,11 @@ export async function getState(db: D1Database) {
   ])
   return {
     livreurs: liv.results.map(rowToLivreur),
-    tournees: tou.results.map(rowToTournee),
+    // Les tracés pèsent 98 % de la charge utile : on les laisse en base et on les
+    // sert à la demande via getGeometrie. La liste ne transporte que les chiffres.
+    tournees: tou.results.map(rowToTournee).map((t) =>
+      t.route ? { ...t, route: { ...t.route, geometry: [] } } : t,
+    ),
     adresses: adr.results.map(rowToAdresse),
   }
 }
@@ -274,6 +278,17 @@ export async function getCorbeille(db: D1Database): Promise<{ tournees: Tournee[
 // la restauration d'un livreur (qui ne touchent aucune tournée, donc pas `stamp` non plus)
 // ne seraient jamais visibles depuis l'autre poste. Un simple renommage reste indétectable :
 // c'est assumé, il ne fait perdre aucune donnée.
+/** Tracé d'une tournée, servi séparément pour garder /api/state léger. */
+export async function getGeometrie(db: D1Database, id: string): Promise<[number, number][]> {
+  const row = await db
+    .prepare('SELECT route_json FROM tournees WHERE id = ?')
+    .bind(id)
+    .first<{ route_json: string | null }>()
+  if (!row?.route_json) return []
+  const route = JSON.parse(row.route_json) as RouteResult
+  return route.geometry ?? []
+}
+
 export async function getSync(db: D1Database): Promise<{ stamp: number; livreurs: number }> {
   const [t, l] = await Promise.all([
     db.prepare('SELECT MAX(updated_at) AS stamp FROM tournees').first<{ stamp: number | null }>(),

@@ -8,11 +8,13 @@ vi.mock('../services/routing', () => ({
     order: stops.map((_, i) => i),
     route: { km: 10, min: 15, geometry: [], optimized: true, approximate: false },
   })),
-  computeRoute: vi.fn(async () => ({ km: 5, min: 8, geometry: [], optimized: false, approximate: false })),
+  computeRoute: vi.fn(async () => ({ km: 5, min: 8, geometry: [[1, 2]], optimized: false, approximate: false })),
 }))
 
 // On ne simule que le transport : `ConflitError` reste la vraie classe, sinon
 // l'`instanceof` du contexte ne reconnaitrait pas les refus du serveur.
+vi.mock('../services/printSheet', () => ({ printTourneeSheet: vi.fn() }))
+
 vi.mock('../services/api', async () => {
   const actual = await vi.importActual<typeof import('../services/api')>('../services/api')
   return {
@@ -31,6 +33,7 @@ vi.mock('../services/api', async () => {
       deleteTournee: vi.fn(async () => ({ ok: true })),
       upsertAdresse: vi.fn(async () => ({ ok: true })),
       deleteAdresse: vi.fn(async () => ({ ok: true })),
+      getGeometrie: vi.fn(async () => ({ geometry: [] as [number, number][] })),
       getSync: vi.fn(async () => ({ stamp: 1, livreurs: 0 })),
       getCorbeille: vi.fn(async () => ({ tournees: [], livreurs: [] })),
       restore: vi.fn(async () => ({ ok: true })),
@@ -41,6 +44,7 @@ vi.mock('../services/api', async () => {
 import { api, ConflitError } from '../services/api'
 import type { AppState } from '../services/api'
 import { computeRoute, optimizeTrip } from '../services/routing'
+import { printTourneeSheet } from '../services/printSheet'
 import type { RouteResult } from '../types'
 
 const wrapper = ({ children }: { children: ReactNode }) => <LivreurProvider>{children}</LivreurProvider>
@@ -422,5 +426,68 @@ describe('LivreurContext — travail à deux', () => {
 
     expect(result.current.livreurs.map((l) => l.nom)).toEqual(['ACTIF'])
     expect(result.current.livreursTous.map((l) => l.nom)).toEqual(['ACTIF', 'PARTI'])
+  })
+
+  it('geometrieDe va chercher le tracé absent de /api/state, puis le met en cache', async () => {
+    const trace: [number, number][] = [[48.1, 1.1], [48.2, 1.2]]
+    vi.mocked(api.getGeometrie).mockResolvedValue({ geometry: trace })
+    const { result } = await ready()
+    await act(async () => { await result.current.addLivreur({ nom: 'B', prenom: 'K', telephone: '' }) })
+    let tid = ''
+    await act(async () => {
+      tid = await result.current.addTournee({ livreurId: result.current.livreurs[0].id, date: '2026-10-13' })
+    })
+    vi.mocked(api.getGeometrie).mockClear()
+
+    let g1: [number, number][] = []
+    let g2: [number, number][] = []
+    await act(async () => { g1 = await result.current.geometrieDe(tid) })
+    await act(async () => { g2 = await result.current.geometrieDe(tid) })
+
+    expect(g1).toEqual(trace)
+    expect(g2).toEqual(trace)
+    expect(api.getGeometrie).toHaveBeenCalledTimes(1) // le second appel sort du cache
+  })
+
+  it('un calcul d’itinéraire alimente le cache : aucun aller-retour réseau ensuite', async () => {
+    const { result } = await ready()
+    await act(async () => { await result.current.addLivreur({ nom: 'B', prenom: 'K', telephone: '' }) })
+    let tid = ''
+    await act(async () => {
+      tid = await result.current.addTournee({ livreurId: result.current.livreurs[0].id, date: '2026-10-13' })
+    })
+    // addStopToTournee déclenche computeRoute, dont le tracé mocké est [[1,2]]
+    await act(async () => {
+      await result.current.addStopToTournee(tid, { id: 'ban-1', label: 'A', ville: 'V', lat: 48, lng: 1 })
+    })
+    vi.mocked(api.getGeometrie).mockClear()
+
+    let g: [number, number][] = []
+    await act(async () => { g = await result.current.geometrieDe(tid) })
+
+    expect(g).toEqual([[1, 2]])
+    expect(api.getGeometrie).not.toHaveBeenCalled()
+  })
+
+  it('imprimerTournee charge le tracé avant d’imprimer, jamais une carte vide', async () => {
+    const trace: [number, number][] = [[48.1, 1.1], [48.2, 1.2]]
+    vi.mocked(api.getGeometrie).mockResolvedValue({ geometry: trace })
+    const { result } = await ready()
+    await act(async () => { await result.current.addLivreur({ nom: 'B', prenom: 'K', telephone: '' }) })
+    let tid = ''
+    await act(async () => {
+      tid = await result.current.addTournee({ livreurId: result.current.livreurs[0].id, date: '2026-10-13' })
+    })
+
+    await act(async () => {
+      await result.current.imprimerTournee(
+        { ...result.current.tournees[0], route: { km: 1, min: 1, geometry: [], optimized: false, approximate: false } },
+        result.current.livreurs[0],
+      )
+    })
+
+    expect(api.getGeometrie).toHaveBeenCalledWith(tid)
+    const imprimee = vi.mocked(printTourneeSheet).mock.calls.at(-1)?.[0]
+    expect(imprimee?.route?.geometry).toEqual(trace)
   })
 })

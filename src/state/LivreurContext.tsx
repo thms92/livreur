@@ -8,6 +8,7 @@ import { makeStopId } from '../services/stopId'
 import { computeRoute, optimizeTrip } from '../services/routing'
 import { sameStopOrder, sortStopsByTime } from '../lib/stopOrder'
 import { api, ConflitError } from '../services/api'
+import { printTourneeSheet } from '../services/printSheet'
 import { usePersistentState } from './usePersistentState'
 
 const defaultProvider = new BanProvider()
@@ -76,6 +77,8 @@ export interface LivreurState {
   refreshRoute: (tourneeId: string) => Promise<void>
   setSansPeage: (tourneeId: string, sansPeage: boolean) => Promise<void>
   removeAdresse: (id: string) => Promise<void>
+  geometrieDe: (tourneeId: string) => Promise<[number, number][]>
+  imprimerTournee: (tournee: Tournee, livreur: LivreurWithColor | undefined) => Promise<void>
   recharger: () => Promise<void>
   restaurer: (id: string, type: 'tournee' | 'livreur') => Promise<void>
 }
@@ -160,6 +163,37 @@ export function LivreurProvider({ children }: { children: ReactNode }) {
     adopterVersions(s.tournees)
     return true
   }, [adopterVersions])
+
+  // Les tracés ne voyagent plus dans /api/state (98 % de sa charge utile) : on les
+  // charge à la demande et on les garde ici. Un calcul d'itinéraire alimente ce cache
+  // directement, ce qui évite d'aller rechercher ce qu'on vient de produire.
+  const traces = useRef(new Map<string, [number, number][]>())
+
+  const geometrieDe = useCallback(async (tourneeId: string): Promise<[number, number][]> => {
+    const connu = traces.current.get(tourneeId)
+    if (connu) return connu
+    try {
+      const { geometry } = await api.getGeometrie(tourneeId)
+      traces.current.set(tourneeId, geometry)
+      return geometry
+    } catch {
+      return [] // pas de tracé plutôt qu'un écran en erreur
+    }
+  }, [])
+
+  /**
+   * Imprime une feuille de tournée en s'assurant d'abord d'avoir son tracé : depuis
+   * l'allègement de /api/state, il n'arrive plus avec la liste, et une feuille
+   * imprimée sans lui porterait une carte vide.
+   */
+  const imprimerTournee = useCallback(
+    async (tournee: Tournee, livreur: LivreurWithColor | undefined) => {
+      const geometry = await geometrieDe(tournee.id)
+      const avecTrace = tournee.route ? { ...tournee, route: { ...tournee.route, geometry } } : tournee
+      printTourneeSheet(avecTrace, livreur)
+    },
+    [geometrieDe],
+  )
 
   const recharger = useCallback(async () => { await relire() }, [relire])
 
@@ -271,6 +305,9 @@ export function LivreurProvider({ children }: { children: ReactNode }) {
    * La version renvoyée est rangée aussitôt, pour l'écriture suivante.
    */
   const ecrireTournee = useCallback(async (id: string, patch: PatchTournee) => {
+    // Un itinéraire qu'on vient de calculer porte son tracé : on le met en cache ici
+    // plutôt que d'aller le redemander au serveur juste après l'avoir envoyé.
+    if (patch.route?.geometry?.length) traces.current.set(id, patch.route.geometry)
     const precedente = filesEcriture.current.get(id)
     const envoi = (async () => {
       if (precedente) await precedente // son échec est déjà neutralisé (cf. ci-dessous)
@@ -553,6 +590,8 @@ export function LivreurProvider({ children }: { children: ReactNode }) {
     addStopToTournee, removeStopFromTournee, reorderStops,
     setStopHeure, setTourneeHeure, sortTourneeByTime,
     optimizeTournee, refreshRoute, setSansPeage, removeAdresse,
+    geometrieDe,
+    imprimerTournee,
     recharger, restaurer,
   }
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>

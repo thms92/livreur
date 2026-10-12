@@ -2,7 +2,6 @@ import { useLivreur } from '../../state/LivreurContext'
 import { AddressAutocomplete } from '../AddressAutocomplete'
 import { TourneeMap } from '../map/TourneeMap'
 import { StopList } from './StopList'
-import { printTourneeSheet } from '../../services/printSheet'
 import { formatDuree } from '../../lib/tourneeTime'
 
 interface Props {
@@ -28,6 +27,7 @@ export function TourneeEditor({ tourneeId, onClose }: Props) {
     optimizeTournee,
     setSansPeage,
     refreshRoute,
+    imprimerTournee,
   } = useLivreur()
 
   const tournee = tournees.find((t) => t.id === tourneeId)
@@ -135,7 +135,7 @@ export function TourneeEditor({ tourneeId, onClose }: Props) {
           <button className="btn-ghost" onClick={() => optimizeTournee(tournee.id)}>
             Ré-optimiser
           </button>
-          <button className="btn-ghost" onClick={() => printTourneeSheet(tournee, livreur)}>
+          <button className="btn-ghost" onClick={() => void imprimerTournee(tournee, livreur)}>
             Imprimer
           </button>
           <span className="total">

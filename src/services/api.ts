@@ -65,6 +65,9 @@ export const api = {
   upsertAdresse: (a: Suggestion) => req<{ ok: true }>('/api/adresses', 'POST', a),
   deleteAdresse: (id: string) => req<{ ok: true }>(`/api/adresses/${id}`, 'DELETE'),
 
+  getGeometrie: (id: string) =>
+    req<{ geometry: [number, number][] }>(`/api/tournees/${id}/geometrie`, 'GET'),
+
   getSync: () => req<{ stamp: number; livreurs: number }>('/api/sync', 'GET'),
   getCorbeille: () => req<{ tournees: Tournee[]; livreurs: Livreur[] }>('/api/corbeille', 'GET'),
   restore: (id: string, type: 'tournee' | 'livreur') =>

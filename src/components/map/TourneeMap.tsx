@@ -4,6 +4,7 @@ import type { LatLng, RouteResult, Stop } from '../../types'
 import { DEPOT } from '../../data/depot'
 import { BaseMap } from './BaseMap'
 import { depotIcon, numberedIcon } from './pins'
+import { useTraces } from '../../state/useTraces'
 
 export interface TourneeOnMap {
   id: string
@@ -16,7 +17,9 @@ interface Props {
   tournees: TourneeOnMap[]
 }
 
-export function TourneeMap({ tournees }: Props) {
+export function TourneeMap({ tournees: brutes }: Props) {
+  // Les tracés ne viennent plus avec /api/state : la carte les réclame elle-même.
+  const tournees = useTraces(brutes)
   // Référence stable tant que les coordonnées ne changent pas : évite que la carte
   // ne se recadre (fitBounds) à chaque re-rendu (ex. saisie dans le formulaire).
   const coordKey = tournees

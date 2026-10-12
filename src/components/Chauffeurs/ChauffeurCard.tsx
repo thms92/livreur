@@ -1,6 +1,5 @@
 import type { Tournee } from '../../types'
-import type { LivreurWithColor } from '../../state/LivreurContext'
-import { printTourneeSheet } from '../../services/printSheet'
+import { useLivreur, type LivreurWithColor } from '../../state/LivreurContext'
 import { formatDuree } from '../../lib/tourneeTime'
 
 interface Props {
@@ -9,6 +8,7 @@ interface Props {
 }
 
 export function ChauffeurCard({ livreur, tournees }: Props) {
+  const { imprimerTournee } = useLivreur()
   const stopsTotal = tournees.reduce((n, t) => n + t.stops.length, 0)
   const kmTotal = tournees.reduce((n, t) => n + (t.route?.km ?? 0), 0)
   const minTotal = tournees.reduce((n, t) => n + (t.route?.min ?? 0), 0)
@@ -30,7 +30,7 @@ export function ChauffeurCard({ livreur, tournees }: Props) {
           <span className="chauffeur-trip-line">
             🏭 {t.stops.map((s, i) => `→ ${i + 1}. ${s.ville || s.label}`).join(' ')} → 🏭
           </span>
-          <button className="btn-ghost btn-print" onClick={() => printTourneeSheet(t, livreur)}>
+          <button className="btn-ghost btn-print" onClick={() => void imprimerTournee(t, livreur)}>
             Imprimer
           </button>
         </div>
