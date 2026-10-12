@@ -67,7 +67,18 @@ function chunkLocations(pts: LatLng[]): LatLng[][] {
   return chunks
 }
 
-async function askValhalla(path: string, pts: LatLng[], sansPeage: boolean): Promise<Trip> {
+/**
+ * Nombre total de tentatives avant de renoncer. Un hoquet d'une seconde ne doit
+ * pas dégrader un itinéraire réel en estimation à vol d'oiseau : c'est cette
+ * dégradation, enregistrée en base, qui faisait partir des feuilles de tournée
+ * avec une distance fausse.
+ */
+const TENTATIVES = 3
+const ATTENTE_MS = 600
+
+const pause = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+async function unAppel(path: string, pts: LatLng[], sansPeage: boolean): Promise<Trip> {
   const res = await fetch(`${VALHALLA}${path}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -81,6 +92,19 @@ async function askValhalla(path: string, pts: LatLng[], sansPeage: boolean): Pro
   const data = (await res.json()) as { trip?: Trip }
   if (!data.trip) throw new Error('valhalla')
   return data.trip
+}
+
+async function askValhalla(path: string, pts: LatLng[], sansPeage: boolean): Promise<Trip> {
+  let derniere: unknown
+  for (let essai = 1; essai <= TENTATIVES; essai++) {
+    try {
+      return await unAppel(path, pts, sansPeage)
+    } catch (e) {
+      derniere = e
+      if (essai < TENTATIVES) await pause(ATTENTE_MS * essai)
+    }
+  }
+  throw derniere instanceof Error ? derniere : new Error('valhalla')
 }
 
 /**

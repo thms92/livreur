@@ -83,6 +83,12 @@ export function buildSheetHtml(tournee: Tournee, livreur: LivreurWithColor | und
   const nom = livreur ? `${livreur.prenom} ${livreur.nom}` : '—'
   const tel = livreur?.telephone ? ` · ${esc(livreur.telephone)}` : ''
   const depotLine = `${DEPOT.label}, ${DEPOT.ville} (${DEPOT.codePostal})`
+  // Une feuille partie chez le livreur avec un tracé à vol d'oiseau donne des
+  // kilomètres faux et une carte en lignes droites : ça se signale en grand.
+  const bandeauEstimation = tournee.route?.approximate
+    ? `<p class="alerte">⚠ ITINÉRAIRE NON CALCULÉ — distances et tracé estimés à vol d'oiseau, ` +
+      `ne pas s'y fier. Relancer le calcul dans l'application.</p>`
+    : ''
   const total = tournee.route
     ? `${tournee.route.km.toFixed(0)} km · ${formatDuree(tournee.route.min)}` +
       (tournee.route.approximate ? ' (estimation hors-ligne)' : '')
@@ -110,6 +116,7 @@ export function buildSheetHtml(tournee: Tournee, livreur: LivreurWithColor | und
   body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; color: #000; margin: 24px; }
   h1 { font-size: 20px; margin: 0 0 8px; }
   .meta { font-size: 14px; margin-bottom: 12px; line-height: 1.5; }
+  .alerte { font-size: 14px; font-weight: 700; margin: 0 0 12px; padding: 10px 12px; border: 2px solid #000; background: #eee; }
   .meta b { font-size: 16px; }
   /* taille fixe (px) : le cadrage Leaflet doit être identique à l'écran et à l'impression */
   #map { width: 680px; height: 360px; max-width: 100%; margin: 0 0 16px; border: 1px solid #ccc; border-radius: 6px; }
@@ -130,6 +137,7 @@ export function buildSheetHtml(tournee: Tournee, livreur: LivreurWithColor | und
   <div class="meta"><b>${esc(nom)}</b>${tel}<br>Date : ${esc(formatDateFr(tournee.date))}${
     total ? `<br>Total : ${esc(total)}` : ''
   }<br>Itinéraire : ${esc(modePeage)}</div>
+  ${bandeauEstimation}
   <div id="map"></div>
   <ol>
     <li class="depot">🏭 Départ — ${esc(depotLine)}${departH}</li>

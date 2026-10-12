@@ -14,6 +14,7 @@ vi.mock('react-leaflet', () => ({
 }))
 
 const setSansPeage = vi.fn()
+const refreshRoute = vi.fn()
 
 const tournee: Tournee = {
   id: 't1', livreurId: 'l1', date: '2026-08-19',
@@ -40,6 +41,7 @@ vi.mock('../../state/LivreurContext', () => ({
     removeStopFromTournee: vi.fn(), reorderStops: vi.fn(), setStopHeure: vi.fn(),
     setTourneeHeure: vi.fn(), sortTourneeByTime: vi.fn(), optimizeTournee: vi.fn(),
     setSansPeage,
+    refreshRoute,
   }),
 }))
 
@@ -112,5 +114,27 @@ describe('TourneeEditor — affectation', () => {
     render(<TourneeEditor tourneeId="t1" onClose={() => {}} />)
     expect(screen.getByRole('option', { name: 'K B' })).toBeInTheDocument()
     expect(screen.queryByRole('option', { name: 'P PARTI' })).not.toBeInTheDocument()
+  })
+
+  it('avertit visiblement quand l’itinéraire est une estimation, avec un bouton pour relancer', async () => {
+    override = {
+      route: { km: 180, min: 216, geometry: [], optimized: false, approximate: true },
+    }
+    render(<TourneeEditor tourneeId="t1" onClose={() => {}} />)
+
+    const alerte = screen.getByRole('alert')
+    expect(alerte).toHaveTextContent(/estimation/i)
+
+    await userEvent.click(screen.getByRole('button', { name: /relancer le calcul/i }))
+    expect(refreshRoute).toHaveBeenCalledWith('t1')
+  })
+
+  it('aucun avertissement quand l’itinéraire est réel', () => {
+    override = {
+      route: { km: 254, min: 397, geometry: [], optimized: true, approximate: false },
+    }
+    render(<TourneeEditor tourneeId="t1" onClose={() => {}} />)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /relancer le calcul/i })).not.toBeInTheDocument()
   })
 })

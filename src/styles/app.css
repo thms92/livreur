@@ -258,3 +258,8 @@ button { font-family: inherit; cursor: pointer; }
 /* Identité du poste (portillon) et attribution des écritures */
 .operateur-gate { max-width: 420px; margin: 15vh auto; display: flex; flex-direction: column; gap: 14px; }
 .attribution { font-size: 12px; }
+
+/* Itinéraire non calculé : l'estimation à vol d'oiseau fausse les distances et
+   la carte imprimée, elle doit donc se voir et se corriger en un clic. */
+.alerte-itineraire { display: flex; align-items: center; gap: 14px; padding: 12px 14px; border-radius: 8px; border: 1px solid #e5484d; background: rgba(229, 72, 77, 0.08); font-size: 13px; }
+.alerte-itineraire button { margin-left: auto; white-space: nowrap; }

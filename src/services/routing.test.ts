@@ -261,3 +261,46 @@ describe('limite de 10 points de l’instance Valhalla', () => {
     expect(urls.some((u) => u.includes('/route'))).toBe(true)
   })
 })
+
+describe('résistance aux hoquets du routeur', () => {
+  it('réessaie après un échec passager et finit par réussir', async () => {
+    let appels = 0
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => {
+      appels++
+      if (appels === 1) return Promise.reject(new Error('reseau'))
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(tripRoute([SHAPE_A])) })
+    }))
+
+    const route = await computeRoute(stops)
+
+    expect(appels).toBeGreaterThan(1)
+    // Le hoquet ne doit PAS dégrader l'itinéraire en vol d'oiseau.
+    expect(route.approximate).toBe(false)
+    expect(route.km).toBeCloseTo(31)
+  })
+
+  it('réessaie aussi sur une réponse serveur en erreur', async () => {
+    let appels = 0
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => {
+      appels++
+      return Promise.resolve(
+        appels === 1
+          ? { ok: false, json: () => Promise.resolve({}) }
+          : { ok: true, json: () => Promise.resolve(tripRoute([SHAPE_A])) },
+      )
+    }))
+
+    const route = await computeRoute(stops)
+    expect(route.approximate).toBe(false)
+  })
+
+  it('abandonne après plusieurs tentatives et bascule en vol d’oiseau', async () => {
+    const f = vi.fn().mockRejectedValue(new Error('reseau'))
+    vi.stubGlobal('fetch', f)
+
+    const route = await computeRoute(stops)
+
+    expect(f.mock.calls.length).toBeGreaterThan(1) // il a bien insisté
+    expect(route.approximate).toBe(true)
+  })
+})

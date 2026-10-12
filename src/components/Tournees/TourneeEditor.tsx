@@ -27,6 +27,7 @@ export function TourneeEditor({ tourneeId, onClose }: Props) {
     sortTourneeByTime,
     optimizeTournee,
     setSansPeage,
+    refreshRoute,
   } = useLivreur()
 
   const tournee = tournees.find((t) => t.id === tourneeId)
@@ -114,6 +115,19 @@ export function TourneeEditor({ tourneeId, onClose }: Props) {
           <span>Sans péage</span>
         </label>
 
+        {tournee.route?.approximate && (
+          <div className="alerte-itineraire" role="alert">
+            <span>
+              Le calculateur d'itinéraire n'a pas répondu : les kilomètres et le tracé
+              affichés sont une <b>estimation à vol d'oiseau</b>, pas la route réelle.
+              N'imprimez pas cette feuille en l'état.
+            </span>
+            <button className="btn-primary" onClick={() => refreshRoute(tournee.id)}>
+              Relancer le calcul
+            </button>
+          </div>
+        )}
+
         <div className="editor-footer">
           <button className="btn-ghost" onClick={() => sortTourneeByTime(tournee.id)}>
             Trier par heure
@@ -127,7 +141,7 @@ export function TourneeEditor({ tourneeId, onClose }: Props) {
           <span className="total">
             {tournee.route
               ? `${tournee.route.km.toFixed(0)} km · ${formatDuree(tournee.route.min)}` +
-                (tournee.route.approximate ? ' (approx. hors-ligne)' : '')
+                (tournee.route.approximate ? ' — estimation, non calculé' : '')
               : '—'}
           </span>
           <button className="btn-primary" onClick={onClose}>Enregistrer la tournée</button>

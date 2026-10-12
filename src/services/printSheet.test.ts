@@ -86,4 +86,19 @@ describe('buildSheetHtml', () => {
     expect(html).not.toContain('cartocdn')
     expect(html).not.toContain('{r}')
   })
+
+  it('avertit en haut de la feuille quand l’itinéraire n’est qu’une estimation', () => {
+    const html = buildSheetHtml(
+      { ...tournee, route: { km: 180, min: 216, geometry: [], optimized: false, approximate: true } },
+      livreur,
+    )
+    expect(html).toContain('ITINÉRAIRE NON CALCULÉ')
+    // L'avertissement doit précéder la liste des arrêts, pas se perdre en bas.
+    expect(html.indexOf('ITINÉRAIRE NON CALCULÉ')).toBeLessThan(html.indexOf('<ol>'))
+  })
+
+  it('aucun bandeau quand l’itinéraire est réel', () => {
+    const html = buildSheetHtml(tournee, livreur)
+    expect(html).not.toContain('ITINÉRAIRE NON CALCULÉ')
+  })
 })
